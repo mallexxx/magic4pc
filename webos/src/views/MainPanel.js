@@ -39,8 +39,8 @@
             this.restartUserActivityTimer()
             this.registerScreenSaverRequest(appId);
         }
-		
-	    restartUserActivityTimer() {
+        
+       restartUserActivityTimer() {
           new LS2Request().send({
             service: 'luna://com.webos.surfacemanager.screenSaver/',
             method: 'restartUserActivityTimer',
@@ -67,7 +67,7 @@
         }
 
         registerScreenSaverRequest(clientName) {
-	  var _this = this;
+          var _this = this;
           new LS2Request().send({
             service: 'luna://com.webos.service.tvpower/',
             method: 'power/registerScreenSaverRequest',
