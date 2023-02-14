@@ -39,6 +39,49 @@
             this.restartUserActivityTimer()
             this.registerScreenSaverRequest(appId);
         }
+		
+	    restartUserActivityTimer() {
+          new LS2Request().send({
+            service: 'luna://com.webos.surfacemanager.screenSaver/',
+            method: 'restartUserActivityTimer',
+            parameters: {},
+            onSuccess: function onSuccess(res) {
+              console.log('restartUserActivityTimer:', res);
+            }
+          });
+        }
+
+        respondToScreenSaverRequest(clientName, timestamp, ack) {
+          new LS2Request().send({
+            service: 'luna://com.webos.service.tvpower/',
+            method: 'power/responseScreenSaverRequest',
+            parameters: {
+              clientName: clientName,
+              timestamp: timestamp,
+              ack: ack
+            },
+            onSuccess: function onSuccess(res) {
+              console.log('respondToScreenSaverRequest:', res);
+            }
+          });
+        }
+
+        registerScreenSaverRequest(clientName) {
+          new LS2Request().send({
+            service: 'luna://com.webos.service.tvpower/',
+            method: 'power/registerScreenSaverRequest',
+            parameters: {
+              clientName: clientName,
+              subscribe: true
+            },
+            onSuccess: function onSuccess(res) {
+              console.log('registerScreenSaverRequest:', res);
+              if (res.timestamp) {
+                this.respondToScreenSaverRequest(clientName, res.timestamp, false); // Send NACK.
+              }
+            }
+          });
+        }
 
         startService() {
             console.log('Requesting service start');
@@ -361,50 +404,6 @@
         handleClosePopup() {
             this.setState({popupOpen: false});
             clearInterval(this.updateLogTask);
-        }
-
-
-        restartUserActivityTimer() {
-          new LS2Request().send({
-            service: 'luna://com.webos.surfacemanager.screenSaver/',
-            method: 'restartUserActivityTimer',
-            parameters: {},
-            onSuccess: function onSuccess(res) {
-              console.log('restartUserActivityTimer:', res);
-            }
-          });
-        }
-
-        respondToScreenSaverRequest(clientName, timestamp, ack) {
-          new LS2Request().send({
-            service: 'luna://com.webos.service.tvpower/',
-            method: 'power/responseScreenSaverRequest',
-            parameters: {
-              clientName: clientName,
-              timestamp: timestamp,
-              ack: ack
-            },
-            onSuccess: function onSuccess(res) {
-              console.log('respondToScreenSaverRequest:', res);
-            }
-          });
-        }
-
-        registerScreenSaverRequest(clientName) {
-          new LS2Request().send({
-            service: 'luna://com.webos.service.tvpower/',
-            method: 'power/registerScreenSaverRequest',
-            parameters: {
-              clientName: clientName,
-              subscribe: true
-            },
-            onSuccess: function onSuccess(res) {
-              console.log('registerScreenSaverRequest:', res);
-              if (res.timestamp) {
-                this.respondToScreenSaverRequest(clientName, res.timestamp, false); // Send NACK.
-              }
-            }
-          });
         }
 
 
