@@ -67,6 +67,7 @@
         }
 
         registerScreenSaverRequest(clientName) {
+	  var _this = this;
           new LS2Request().send({
             service: 'luna://com.webos.service.tvpower/',
             method: 'power/registerScreenSaverRequest',
@@ -77,7 +78,7 @@
             onSuccess: function onSuccess(res) {
               console.log('registerScreenSaverRequest:', res);
               if (res.timestamp) {
-                this.respondToScreenSaverRequest(clientName, res.timestamp, false); // Send NACK.
+                _this.respondToScreenSaverRequest(clientName, res.timestamp, false); // Send NACK.
               }
             }
           });
