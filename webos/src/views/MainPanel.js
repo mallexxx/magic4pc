@@ -39,7 +39,7 @@
             this.restartUserActivityTimer()
             this.registerScreenSaverRequest(appId);
         }
-        
+
        restartUserActivityTimer() {
           new LS2Request().send({
             service: 'luna://com.webos.surfacemanager.screenSaver/',
@@ -67,7 +67,7 @@
         }
 
         registerScreenSaverRequest(clientName) {
-          var _this = this;
+          let _this = this;
           new LS2Request().send({
             service: 'luna://com.webos.service.tvpower/',
             method: 'power/registerScreenSaverRequest',
@@ -391,12 +391,6 @@
             zIndex: 2,
         };
 
-        buttonStyle = {
-            width: '1px',
-            height: '1px',
-            zIndex: 1,
-        }
-
         handleOpenPopup() {
             this.setState({popupOpen: true});
             this.updateLogTask = setInterval(() => this.updateLog(), 1000);
@@ -419,9 +413,6 @@
                         />
                     </video>
                     <div style={this.overlayStyle}>
-                        {this.state.settingsButtonVisible ? (
-                            <Button onClick={this.handleOpenPopup} />
-                        ) : null}
                         <Popup open={this.state.popupOpen} onClose={this.handleClosePopup}>
                             <div>
                                 <p id="status">{this.state.label}</p>
