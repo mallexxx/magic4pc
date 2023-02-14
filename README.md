@@ -4,7 +4,7 @@ Allows you to use the magic remote on your webOS LG TV as a mouse for your PC.
 
 Modified to remove the gear icon and make settings open when 'Red' pressed.
 
-#⚠️THIS VERSION HAS SLEEP DISABLED. Be careful with OLEDs.⚠️
+# ⚠️THIS VERSION HAS SLEEP DISABLED. Be careful with OLEDs.⚠️
 
 # Installing
 
