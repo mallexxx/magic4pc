@@ -6,7 +6,7 @@ Modified to remove the gear icon and make settings open when 'Guide' is pressed.
 
 # ⚠️THIS VERSION HAS SLEEP DISABLED. Be careful with OLEDs.⚠️
 
-See https://github.com/netham45/magic4pc_altclient for a Go client for magic4pc
+See https://github.com/netham45/magic4pc_altclient for a cross-platform Go client for magic4pc
 
 # Installing
 
