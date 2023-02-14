@@ -123,7 +123,7 @@
 
         onButtonDown(event) {
             console.log(event.keyCode + ' down');
-            if (event.keyCode === 403)
+            if (event.keyCode === 1006 || event.keyCode == 458)
             {
                 this.handleOpenPopup();
             }
