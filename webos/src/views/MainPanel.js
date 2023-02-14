@@ -77,6 +77,10 @@ class MainPanel extends React.Component {
 
 	onButtonDown(event) {
 		console.log(event.keyCode + ' down');
+		if (event.keyCode == 403)
+		{
+			this.handleOpenPopup();
+		}
 		this.onButton(event.keyCode, true);
 	}
 
@@ -362,9 +366,6 @@ class MainPanel extends React.Component {
 					/>
 				</video>
 				<div style={this.overlayStyle}>
-					{this.state.settingsButtonVisible ? (
-						<Button onClick={this.handleOpenPopup} icon="gear" />
-					) : null}
 					<Popup open={this.state.popupOpen} onClose={this.handleClosePopup}>
 						<div>
 							<p id="status">{this.state.label}</p>
