@@ -122,8 +122,26 @@
         }
 
         onButtonDown(event) {
+            // 13 (0xD) – enter
+            // 37 (0x25) – left
+            // 38 (0x26) – up
+            // 39 (0x27) – right
+            // 40 (0x28) – down
+            // 48..57 – 0..9
+            // 33 (0x21 pgup) – P+
+            // 34 (0x22 pgdown) – P-
+            // 1006 – LIST
+            // 403 – red
+            // 404 – green
+            // 405 – yellow
+            // 406 – blue
+            // 415 – play
+            // 19 (0x13 PAUSE) - pause
+            // 458 – GUIDE
+            // 461 - back
+
             console.log(event.keyCode + ' down');
-            if (event.keyCode === 1006 || event.keyCode == 458)
+            if (event.keyCode === 1006 /* LIST */)
             {
                 this.handleOpenPopup();
             }
