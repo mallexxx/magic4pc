@@ -2,7 +2,6 @@
 
     import Button from '@enact/sandstone/Button';
     import {Dropdown} from '@enact/sandstone/Dropdown';
-    import {SwitchItem} from '@enact/sandstone/SwitchItem';
     import Popup from '@enact/sandstone/Popup';
     import LS2Request from '@enact/webos/LS2Request';
     import React from 'react';
@@ -39,7 +38,8 @@
                 popupOpen: false,
                 logOpen: false,
                 settingsButtonVisible: true,
-                autostartEnabled: false,
+                installedApps: [],   // [{id, title}]
+                eimDefaultApp: null, // appId string or null = None
             };
             this.logEndRef = React.createRef();
             this.restartUserActivityTimer();
@@ -250,7 +250,27 @@
             if (document.hidden) {
                 this.appendLog('App hidden, stopping service');
                 this.stopService();
-                this.unregisterEIM();
+                const { eimDefaultApp, installedApps } = this.state;
+                if (eimDefaultApp) {
+                    const app = installedApps.find(a => a.id === eimDefaultApp);
+                    const label = app ? app.title : eimDefaultApp;
+                    this.appendLog('Setting EIM default: ' + label);
+                    new LS2Request().send({
+                        service: 'luna://com.webos.service.eim/',
+                        method: 'addDevice',
+                        parameters: {
+                            appId: eimDefaultApp,
+                            pigImage: '',
+                            mvpdIcon: '',
+                            showPopup: false,
+                            label: label,
+                        },
+                        onSuccess: () => this.appendLog('EIM default set OK'),
+                        onFailure: (err) => this.appendLog('EIM default error: ' + JSON.stringify(err)),
+                    });
+                } else {
+                    this.unregisterEIM();
+                }
             } else {
                 this.appendLog('App visible, starting service');
                 this.registerEIM();
@@ -348,6 +368,7 @@
             document.addEventListener('mouseup', this.onMouse, false);
             document.addEventListener('wheel', this.onWheel, false);
             this.loadSettings();
+            this.loadApps();
 
             // Auto-register as EIM device so system keys reach the app
             this.registerEIM();
@@ -453,6 +474,7 @@
         saveSettings() {
             window.localStorage.magic4pcSettings = JSON.stringify({
                 videoSource: this.state.videoSource,
+                eimDefaultApp: this.state.eimDefaultApp,
             });
         }
 
@@ -466,12 +488,36 @@
 
             let settings = {
                 videoSource: this.inputSources[0],
+                eimDefaultApp: null,
                 ...savedSettings,
             };
             console.info('Settings:', settings);
 
+            this.setState({ eimDefaultApp: settings.eimDefaultApp });
+
             this.onInputSourceSelected({
                 selected: this.inputSources.indexOf(settings.videoSource),
+            });
+        }
+
+        loadApps() {
+            new LS2Request().send({
+                service: 'luna://com.webos.applicationManager/',
+                method: 'listApps',
+                parameters: {},
+                onSuccess: (res) => {
+                    if (res.apps) {
+                        const apps = res.apps
+                            .filter(a => a.id && a.title)
+                            .map(a => ({ id: a.id, title: a.title }))
+                            .sort((a, b) => a.title.localeCompare(b.title));
+                        this.setState({ installedApps: apps });
+                        this.appendLog('Loaded ' + apps.length + ' apps');
+                    }
+                },
+                onFailure: (err) => {
+                    this.appendLog('listApps error: ' + JSON.stringify(err));
+                },
             });
         }
 
@@ -519,7 +565,7 @@
         };
 
         render() {
-            const {logOpen, logLines, label, popupOpen, autostartEnabled, videoSource, settingsButtonVisible} = this.state;
+            const {logOpen, logLines, label, popupOpen, videoSource, settingsButtonVisible} = this.state;
             const version = '1.1.0 (' + process.env.BUILD_DATE + ')';
 
             return (
@@ -552,13 +598,23 @@
                                 <Button onClick={this.stopService} size="small">
                                     Disable
                                 </Button>
-                                <div style={{width: '12em', display: 'inline-block'}}>
-                                    <SwitchItem
-                                        selected={autostartEnabled}
-                                        onToggle={this.autostartToggle}
+                                <div style={{width: '20em', display: 'inline-block'}}>
+                                    <Dropdown
+                                        title="Default app on exit"
+                                        selected={(() => {
+                                            const { eimDefaultApp, installedApps } = this.state;
+                                            if (!eimDefaultApp) return 0;
+                                            const idx = installedApps.findIndex(a => a.id === eimDefaultApp);
+                                            return idx >= 0 ? idx + 1 : 0;
+                                        })()}
+                                        onSelect={({selected}) => {
+                                            const app = selected === 0 ? null : this.state.installedApps[selected - 1];
+                                            this.setState({ eimDefaultApp: app ? app.id : null }, () => this.saveSettings());
+                                            this.appendLog('EIM default set to: ' + (app ? app.title : 'None'));
+                                        }}
                                     >
-                                        Autostart
-                                    </SwitchItem>
+                                        {['None', ...this.state.installedApps.map(a => a.title)]}
+                                    </Dropdown>
                                 </div>
                                 <Button onClick={this.handleToggleLog} size="small">
                                     {logOpen ? 'Hide Log' : 'Show Log'}
