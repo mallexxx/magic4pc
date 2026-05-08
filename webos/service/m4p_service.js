@@ -424,7 +424,7 @@ service.register('query', function (message) {
 
 // Relay listApps through privileged service context (web apps lack applicationManager perms)
 service.register('listApps', function (message) {
-	service.call('luna://com.webos.applicationManager/listApps', {}, function (res) {
+	service.call('luna://com.webos.applicationManager/dev/listApps', {}, function (res) {
 		if (res.returnValue && res.apps) {
 			var apps = res.apps
 				.filter(function(a) { return a.id && a.title && a.visible !== false; })

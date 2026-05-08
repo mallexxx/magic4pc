@@ -524,7 +524,8 @@
             });
         }
 
-        loadApps() {
+        loadApps(retries) {
+            if (retries === undefined) retries = 3;
             new LS2Request().send({
                 service: 'luna://me.wouterdek.magic4pc.service/',
                 method: 'listApps',
@@ -537,6 +538,10 @@
                 },
                 onFailure: (err) => {
                     this.appendLog('listApps error: ' + JSON.stringify(err));
+                    if (retries > 0) {
+                        this.appendLog('Retrying listApps in 2s...');
+                        setTimeout(() => this.loadApps(retries - 1), 2000);
+                    }
                 },
             });
         }
