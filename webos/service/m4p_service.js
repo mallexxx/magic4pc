@@ -460,7 +460,7 @@ service.register('checkAutoLaunch', function (message) {
 						try { chosen = fs.readFileSync('/tmp/magic4pc-last-app', 'utf8').trim(); } catch(e3) { chosen = null; }
 					}
 				}
-				if (chosen && chosen !== 'none' && chosen !== '') {
+				if (chosen && chosen !== 'none' && chosen !== '' && chosen !== 'me.wouterdek.magic4pc') {
 					appId = chosen;
 				}
 			} catch(e) {}
