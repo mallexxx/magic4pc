@@ -114,6 +114,7 @@
                     console.log('Service started');
                     this.appendLog('Service started OK');
                     this.updateLog();
+                    this.loadApps();
                     return true;
                 },
                 onFailure: (inError) => {
@@ -392,12 +393,11 @@
             document.addEventListener('mouseup', this.onMouse, false);
             document.addEventListener('wheel', this.onWheel, false);
             this.loadSettings();
-            this.loadApps();
 
             // Auto-register as EIM device so system keys reach the app
             this.registerEIM();
 
-            // Start service immediately on mount (don't wait for visibilitychange)
+            // Start service immediately on mount; loadApps() is called after service starts
             this.startService();
         }
 
