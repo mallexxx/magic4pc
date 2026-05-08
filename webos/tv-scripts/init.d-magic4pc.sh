@@ -33,6 +33,10 @@ monitor_power() {
     while true; do
         script -q -c "luna-send -n 1 -f luna://com.webos.service.tvpower/power/getPowerState '{}'" /tmp/m4p_power_raw.txt 2>/dev/null
         state=$(grep -v '^Script' /tmp/m4p_power_raw.txt | tr -d '\r' | grep '"state"' | head -1 | sed 's/.*"state": *"\([^"]*\)".*/\1/')
+        if [ "$state" = "Suspend" ] && [ "$prev_state" != "Suspend" ]; then
+            echo "[magic4pc init] suspend - clearing run-state for wake" >> /tmp/m4p_debug.log
+            rm -f "$RUN_STATE"
+        fi
         if [ -n "$state" ]; then
             prev_state="$state"
         fi
