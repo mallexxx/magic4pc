@@ -29,6 +29,8 @@
             this.handleClosePopup = this.handleClosePopup.bind(this);
             this.onCursorVisibilityChange = this.onCursorVisibilityChange.bind(this);
             this.handleToggleLog = this.handleToggleLog.bind(this);
+            this.onWheel = this.onWheel.bind(this);
+            this.onMouse = this.onMouse.bind(this);
 
             this.state = {
                 label: '',
