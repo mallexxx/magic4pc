@@ -39,6 +39,7 @@
                 settingsButtonVisible: true,
                 autostartEnabled: false,
             };
+            this.logEndRef = React.createRef();
             this.restartUserActivityTimer();
             this.registerScreenSaverRequest(appId);
         }
@@ -90,8 +91,12 @@
         appendLog(line) {
             const ts = new Date().toLocaleTimeString();
             this.setState(prev => ({
-                logLines: [...prev.logLines.slice(-99), `[${ts}] ${line}`]
-            }));
+                logLines: [...prev.logLines.slice(-199), `[${ts}] ${line}`]
+            }), () => {
+                if (this.logEndRef.current) {
+                    this.logEndRef.current.scrollIntoView({behavior: 'smooth'});
+                }
+            });
         }
 
         startService() {
@@ -146,10 +151,12 @@
 
             console.log(event.keyCode + ' down');
 
-            // While settings panel is open: Back or Blue closes it, other keys blocked
+            // While settings panel is open: Back or Blue closes it, LIST toggles log, other keys blocked
             if (this.state.popupOpen) {
                 if (event.keyCode === 461 /* BACK */ || event.keyCode === 406 /* BLUE */) {
                     this.handleClosePopup();
+                } else if (event.keyCode === 1006 /* LIST */) {
+                    this.handleToggleLog();
                 }
                 return;
             }
@@ -241,8 +248,10 @@
             if (document.hidden) {
                 this.appendLog('App hidden, stopping service');
                 this.stopService();
+                this.unregisterEIM();
             } else {
                 this.appendLog('App visible, starting service');
+                this.registerEIM();
                 this.startService();
             }
         }
@@ -267,7 +276,9 @@
         }
 
         onWheel(e) {
-            console.log('wheel', e.wheelDelta > 0 ? 'up' : 'down');
+            const dir = e.wheelDelta > 0 ? 'up' : 'down';
+            console.log('wheel', dir);
+            this.appendLog('wheel ' + dir);
 
             new LS2Request().send({
                 service: 'luna://me.wouterdek.magic4pc.service/',
@@ -493,12 +504,13 @@
             bottom: 0,
             left: 0,
             right: 0,
-            background: 'rgba(0,0,0,0.5)',
+            background: 'rgba(0,0,0,0.35)',
             color: '#0f0',
             fontFamily: 'monospace',
             fontSize: '0.75em',
             overflowY: 'auto',
             padding: '16px',
+            paddingBottom: '35vh',
             zIndex: 10,
         };
 
@@ -556,6 +568,7 @@
                                 ? <span>No log entries yet</span>
                                 : logLines.map((line, i) => <div key={i}>{line}</div>)
                             }
+                            <div ref={this.logEndRef} />
                         </div>
                     )}
                 </div>
