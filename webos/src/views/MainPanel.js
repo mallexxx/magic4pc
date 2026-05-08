@@ -43,6 +43,7 @@
                 lastUsedAppId: null, // tracked by service via getForegroundAppInfo
             };
             this.logEndRef = React.createRef();
+            this.logContainerRef = React.createRef();
             this.restartUserActivityTimer();
             this.registerScreenSaverRequest(appId);
         }
@@ -96,7 +97,8 @@
             this.setState(prev => ({
                 logLines: [...prev.logLines.slice(-199), `[${ts}] ${line}`]
             }), () => {
-                if (this.logEndRef.current) {
+                // Auto-scroll to bottom only when popup is closed (free-scroll mode when popup open)
+                if (!this.state.popupOpen && this.logEndRef.current) {
                     this.logEndRef.current.scrollIntoView({behavior: 'smooth'});
                 }
             });
@@ -308,6 +310,15 @@
         }
 
         onWheel(e) {
+            // When popup is open: scroll the log panel instead of forwarding to HTPC
+            if (this.state.popupOpen) {
+                const container = this.logContainerRef.current;
+                if (container) {
+                    container.scrollTop -= e.wheelDelta * 0.5;
+                }
+                return;
+            }
+
             const dir = e.wheelDelta > 0 ? 'up' : 'down';
             console.log('wheel', dir);
             this.appendLog('wheel ' + dir);
@@ -565,7 +576,6 @@
             fontSize: '0.75em',
             overflowY: 'auto',
             padding: '16px',
-            paddingBottom: '35vh',
             zIndex: 10,
             pointerEvents: 'none',
         };
@@ -635,8 +645,11 @@
                         </div>
                     </div>
 
-                    {logOpen && (
-                        <div style={this.logPanelStyle}>
+                    {(logOpen || popupOpen) && (
+                        <div ref={this.logContainerRef} style={{
+                            ...this.logPanelStyle,
+                            paddingBottom: popupOpen ? '50vh' : '16px',
+                        }}>
                             {logLines.length === 0
                                 ? <span>No log entries yet</span>
                                 : logLines.map((line, i) => <div key={i}>{line}</div>)
