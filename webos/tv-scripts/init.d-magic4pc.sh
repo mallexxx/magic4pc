@@ -20,9 +20,23 @@ track_foreground() {
     while true; do
         script -q -c "luna-send -n 1 -f luna://com.webos.applicationManager/getForegroundAppInfo '{}'" /tmp/m4p_fg_raw.txt 2>/dev/null
         appId=$(grep -v '^Script' /tmp/m4p_fg_raw.txt | tr -d '\r' | grep '"appId"' | head -1 | sed 's/.*"appId": *"\([^"]*\)".*/\1/')
-        if [ -n "$appId" ] && [ "$appId" != "me.wouterdek.magic4pc" ]; then
-            echo "$appId" > /tmp/magic4pc-last-app
-            cp /tmp/magic4pc-last-app /media/developer/apps/usr/palm/services/me.wouterdek.magic4pc.service/magic4pc-last-app 2>/dev/null
+        if [ -n "$appId" ]; then
+            # Track ALL foreground apps including magic4pc for suspend detection
+            echo "$appId" > /tmp/magic4pc-foreground
+            # Only save non-EIM apps as last-app
+            case "$appId" in
+                com.webos.app.hdmi[0-9]|com.webos.app.externalinput.*|com.webos.app.livetv)
+                    # EIM source is active — mark as already running so magic4pc won't auto-launch
+                    if [ "$appId" != "me.wouterdek.magic4pc" ] && [ ! -f "$RUN_STATE" ]; then
+                        echo "running" > "$RUN_STATE"
+                        echo "[magic4pc init] EIM foreground=$appId, set run-state" >> /tmp/m4p_debug.log
+                    fi
+                    ;;
+                *)
+                    echo "$appId" > /tmp/magic4pc-last-app
+                    cp /tmp/magic4pc-last-app /media/developer/apps/usr/palm/services/me.wouterdek.magic4pc.service/magic4pc-last-app 2>/dev/null
+                    ;;
+            esac
         fi
         sleep 3
     done
@@ -34,8 +48,17 @@ monitor_power() {
         script -q -c "luna-send -n 1 -f luna://com.webos.service.tvpower/power/getPowerState '{}'" /tmp/m4p_power_raw.txt 2>/dev/null
         state=$(grep -v '^Script' /tmp/m4p_power_raw.txt | tr -d '\r' | grep '"state"' | head -1 | sed 's/.*"state": *"\([^"]*\)".*/\1/')
         if [ "$state" = "Suspend" ] && [ "$prev_state" != "Suspend" ]; then
-            echo "[magic4pc init] suspend - clearing run-state for wake" >> /tmp/m4p_debug.log
-            rm -f "$RUN_STATE"
+            foreground=$(cat /tmp/magic4pc-foreground 2>/dev/null)
+            # EIM sources: HDMI1-4, AV1/2, Component, SCART, LiveTV
+            case "$foreground" in
+                com.webos.app.hdmi[0-9]|com.webos.app.externalinput.*|com.webos.app.livetv)
+                    echo "[magic4pc init] suspend: foreground=$foreground is EIM source, keeping run-state" >> /tmp/m4p_debug.log
+                    ;;
+                *)
+                    echo "[magic4pc init] suspend: foreground=$foreground, clearing run-state for wake" >> /tmp/m4p_debug.log
+                    rm -f "$RUN_STATE"
+                    ;;
+            esac
         fi
         if [ -n "$state" ]; then
             prev_state="$state"
