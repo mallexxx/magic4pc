@@ -138,7 +138,7 @@ function startUnicastingData(client, rinfo, request) {
 					'base64'
 				);
 			} catch (ex) {
-				log += 'buildUpdatePayload failed';
+				addLog('buildUpdatePayload failed: ' + ex.message);
 				console.info('Payload build failed:', ex);
 				return true;
 			}
@@ -274,7 +274,14 @@ function buildUpdatePayload(data, settings) {
 	return buffer;
 }
 
-var log = '';
+var log = [];
+function addLog(line) {
+	var ts = new Date().toLocaleTimeString();
+	var entry = '[' + ts + '] ' + line;
+	console.log(entry);
+	log.push(entry);
+	if (log.length > 200) log.shift();
+}
 
 var broadcastAdsActive = false;
 function startBroadcastingAdvertisement() {
@@ -330,20 +337,20 @@ var serviceActive = false;
 var keepAliveActivity = null;
 service.register('start', function (message) {
 	if (serviceActive) {
-		message.respond({
-			//TODO
-		});
+		addLog('start called but already active');
+		message.respond({});
 		return;
 	}
 
+	addLog('Service starting');
 	serviceActive = true;
 	service.activityManager.create('keepAlive', function (activity) {
 		keepAliveActivity = activity;
+		addLog('keepAlive activity created');
 	});
 	startBroadcastingAdvertisement();
-	message.respond({
-		//TODO
-	});
+	addLog('Broadcasting started');
+	message.respond({});
 });
 
 service.register('onInput', function (message) {
@@ -375,28 +382,28 @@ service.register('onWheel', function (message) {
 
 service.register('stop', function (message) {
 	if (!serviceActive) {
-		message.respond({
-			//TODO
-		});
+		addLog('stop called but not active');
+		message.respond({});
 		return;
 	}
 
+	addLog('Service stopping');
 	serviceActive = false;
 	service.activityManager.complete(keepAliveActivity, function (activity) {});
 	keepAliveActivity = null;
 	broadcastAdsActive = false;
 	unicastDataActive = false;
-	message.respond({
-		//TODO
-	});
+	addLog('Service stopped');
+	message.respond({});
 });
 
 service.register('query', function (message) {
+	var newLog = log.splice(0);  // drain accumulated log entries
 	message.respond({
-		status: log, //TODO: is broadcasting/unicasting? connection info? magic remote sub info?
 		serviceActive: serviceActive,
 		broadcastAdsActive: broadcastAdsActive,
 		isConnected: unicastDataActive,
 		unicastRInfo: unicastDataActive ? unicastRInfo : null,
+		log: newLog,
 	});
 });

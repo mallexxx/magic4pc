@@ -1,7 +1,7 @@
 {
 	"id": "me.wouterdek.magic4pc",
 	"appDescription": "Use MagicRemote as an input device on a PC",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"vendor": "WouterDeK",
 	"type": "web",
 	"main": "index.html",

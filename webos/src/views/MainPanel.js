@@ -28,15 +28,18 @@
             this.handleOpenPopup = this.handleOpenPopup.bind(this);
             this.handleClosePopup = this.handleClosePopup.bind(this);
             this.onCursorVisibilityChange = this.onCursorVisibilityChange.bind(this);
+            this.handleToggleLog = this.handleToggleLog.bind(this);
 
             this.state = {
                 label: '',
+                logLines: [],
                 videoSource: 'ext://hdmi:1',
                 popupOpen: false,
+                logOpen: false,
                 settingsButtonVisible: true,
                 autostartEnabled: false,
             };
-            this.restartUserActivityTimer()
+            this.restartUserActivityTimer();
             this.registerScreenSaverRequest(appId);
         }
 
@@ -84,27 +87,37 @@
           });
         }
 
+        appendLog(line) {
+            const ts = new Date().toLocaleTimeString();
+            this.setState(prev => ({
+                logLines: [...prev.logLines.slice(-99), `[${ts}] ${line}`]
+            }));
+        }
+
         startService() {
             console.log('Requesting service start');
-            let onSuccess = (inResponse) => {
-                console.log('Service started');
-                this.updateLog();
-                return true;
-            };
-            let onFailure = (inError) => {
-                console.log('Service start failure: ' + inError);
-                this.setState({label: 'Service start error'});
-                return;
-            };
+            this.appendLog('Starting service...');
             new LS2Request().send({
                 service: 'luna://me.wouterdek.magic4pc.service/',
                 method: 'start',
-                onSuccess: onSuccess,
-                onFailure: onFailure,
+                onSuccess: (inResponse) => {
+                    console.log('Service started');
+                    this.appendLog('Service started OK');
+                    this.updateLog();
+                    return true;
+                },
+                onFailure: (inError) => {
+                    const msg = 'Service start error: ' + JSON.stringify(inError);
+                    console.log(msg);
+                    this.appendLog(msg);
+                    this.setState({label: 'Service start error'});
+                    return;
+                },
             });
         }
 
         onButton(keyCode, isDown) {
+            this.appendLog('key ' + keyCode + (isDown ? ' down' : ' up'));
             new LS2Request().send({
                 service: 'luna://me.wouterdek.magic4pc.service/',
                 method: 'onInput',
@@ -116,6 +129,7 @@
                     return true;
                 },
                 onFailure: (inError) => {
+                    this.appendLog('onInput error: ' + JSON.stringify(inError));
                     return;
                 },
             });
@@ -123,48 +137,58 @@
 
         onButtonDown(event) {
             // 13 (0xD) – enter
-            // 37 (0x25) – left
-            // 38 (0x26) – up
-            // 39 (0x27) – right
-            // 40 (0x28) – down
+            // 37 (0x25) – left / 38 up / 39 right / 40 down
             // 48..57 – 0..9
-            // 33 (0x21 pgup) – P+
-            // 34 (0x22 pgdown) – P-
-            // 1006 – LIST
-            // 403 – red
-            // 404 – green
-            // 405 – yellow
-            // 406 – blue
-            // 415 – play
-            // 19 (0x13 PAUSE) - pause
-            // 458 – GUIDE
-            // 461 - back
+            // 33 (0x21 pgup) – P+ / 34 P-
+            // 403 – red / 404 – green / 405 – yellow / 406 – blue
+            // 415 – play / 19 (0x13) – pause
+            // 458 – GUIDE / 461 – back
 
             console.log(event.keyCode + ' down');
-            if (event.keyCode === 1006 /* LIST */)
-            {
+
+            // While settings panel is open: Back or Blue closes it, other keys blocked
+            if (this.state.popupOpen) {
+                if (event.keyCode === 461 /* BACK */ || event.keyCode === 406 /* BLUE */) {
+                    this.handleClosePopup();
+                }
+                return;
+            }
+
+            if (event.keyCode === 406 /* BLUE */) {
                 this.handleOpenPopup();
+                return;
+            }
+            if (event.keyCode === 1006 /* LIST */) {
+                this.handleToggleLog();
+                return;
             }
             this.onButton(event.keyCode, true);
         }
 
         onButtonUp(event) {
             console.log(event.keyCode + ' up');
+            if (this.state.popupOpen) {
+                return;
+            }
             this.onButton(event.keyCode, false);
         }
 
         stopService() {
             console.log('Requesting service stop');
+            this.appendLog('Stopping service...');
             new LS2Request().send({
                 service: 'luna://me.wouterdek.magic4pc.service/',
                 method: 'stop',
                 onSuccess: (inResponse) => {
                     console.log('Service stopped');
+                    this.appendLog('Service stopped OK');
                     this.updateLog();
                     return true;
                 },
                 onFailure: (inError) => {
-                    console.log('Service stop failure: ' + inError);
+                    const msg = 'Service stop error: ' + JSON.stringify(inError);
+                    console.log(msg);
+                    this.appendLog(msg);
                     this.setState({label: 'Service stop error'});
                     return;
                 },
@@ -200,9 +224,14 @@
                         label = 'Service error';
                     }
                     this.setState({label: label});
+                    if (msg.log) {
+                        msg.log.forEach(line => this.appendLog('[svc] ' + line));
+                    }
                 },
                 (inError) => {
-                    console.log('Error retrieving service state: ' + inError);
+                    const msg = 'Error retrieving service state: ' + JSON.stringify(inError);
+                    console.log(msg);
+                    this.appendLog(msg);
                     this.setState({label: 'Error retrieving service state'});
                 }
             );
@@ -210,8 +239,10 @@
 
         onVisibilityChange() {
             if (document.hidden) {
+                this.appendLog('App hidden, stopping service');
                 this.stopService();
             } else {
+                this.appendLog('App visible, starting service');
                 this.startService();
             }
         }
@@ -249,6 +280,44 @@
             });
         }
 
+        registerEIM() {
+            new LS2Request().send({
+                service: 'luna://com.webos.service.eim/',
+                method: 'addDevice',
+                parameters: {
+                    appId,
+                    pigImage: '',
+                    mvpdIcon: '',
+                    showPopup: false,
+                    label: 'Magic4PC',
+                },
+                onSuccess: (resp) => {
+                    console.log('EIM registered:', resp);
+                    this.appendLog('EIM registered OK');
+                    this.setState({autostartEnabled: true});
+                },
+                onFailure: (err) => {
+                    this.appendLog('EIM register failed: ' + JSON.stringify(err));
+                    console.warn('EIM register failed:', err);
+                },
+            });
+        }
+
+        unregisterEIM() {
+            new LS2Request().send({
+                service: 'luna://com.webos.service.eim/',
+                method: 'deleteDevice',
+                parameters: {appId},
+                onSuccess: (resp) => {
+                    console.log('EIM unregistered:', resp);
+                    this.setState({autostartEnabled: false});
+                },
+                onFailure: (err) => {
+                    console.warn('EIM unregister failed:', err);
+                },
+            });
+        }
+
         componentDidMount() {
             document.addEventListener('keydown', this.onButtonDown, false);
             document.addEventListener('keyup', this.onButtonUp, false);
@@ -267,17 +336,11 @@
             document.addEventListener('wheel', this.onWheel, false);
             this.loadSettings();
 
-            new LS2Request().send({
-                service: 'luna://com.webos.service.eim/',
-                method: 'getAllInputStatus',
-                onSuccess: (resp) => {
-                    const autostartEnabled =
-                        resp.devices.map((dev) => dev.appId).indexOf(appId) !== -1;
-                    this.setState({
-                        autostartEnabled,
-                    });
-                },
-            });
+            // Auto-register as EIM device so system keys reach the app
+            this.registerEIM();
+
+            // Start service immediately on mount (don't wait for visibilitychange)
+            this.startService();
         }
 
         autostartToggle(evt) {
@@ -330,6 +393,7 @@
                 this.onCursorVisibilityChange,
                 false
             );
+            this.unregisterEIM();
         }
 
         inputSourceLabels = [
@@ -419,27 +483,47 @@
             clearInterval(this.updateLogTask);
         }
 
+        handleToggleLog() {
+            this.setState(prev => ({logOpen: !prev.logOpen}));
+        }
+
+        logPanelStyle = {
+            position: 'fixed',
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: 'rgba(0,0,0,0.5)',
+            color: '#0f0',
+            fontFamily: 'monospace',
+            fontSize: '0.75em',
+            overflowY: 'auto',
+            padding: '16px',
+            zIndex: 10,
+        };
 
         render() {
+            const {logOpen, logLines, label, popupOpen, autostartEnabled, videoSource, settingsButtonVisible} = this.state;
+            const version = '1.1.0 (' + process.env.BUILD_DATE + ')';
+
             return (
                 <div>
                     <video id="vidElem" autoPlay>
                         <source
                             id="vidSrcElem"
                             type="service/webos-external"
-                            src={this.state.videoSource}
+                            src={videoSource}
                         />
                     </video>
                     <div style={this.overlayStyle}>
-                        <Popup open={this.state.popupOpen} onClose={this.handleClosePopup}>
-                            <div>
-                                <p id="status">{this.state.label}</p>
+                        <Popup open={popupOpen} onClose={this.handleClosePopup}>
+                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                                <p id="status">{label}</p>
+                                <span style={{opacity: 0.5, fontSize: '0.8em'}}>v{version}</span>
                             </div>
                             <div>
                                 <Dropdown
-                                    defaultSelected={this.inputSources.indexOf(
-                                        this.state.videoSource
-                                    )}
+                                    defaultSelected={this.inputSources.indexOf(videoSource)}
                                     title="Input source"
                                     onSelect={this.onInputSourceSelected}
                                 >
@@ -453,15 +537,27 @@
                                 </Button>
                                 <div style={{width: '12em', display: 'inline-block'}}>
                                     <SwitchItem
-                                        selected={this.state.autostartEnabled}
+                                        selected={autostartEnabled}
                                         onToggle={this.autostartToggle}
                                     >
                                         Autostart
                                     </SwitchItem>
                                 </div>
+                                <Button onClick={this.handleToggleLog} size="small">
+                                    {logOpen ? 'Hide Log' : 'Show Log'}
+                                </Button>
                             </div>
                         </Popup>
                     </div>
+
+                    {logOpen && (
+                        <div style={this.logPanelStyle}>
+                            {logLines.length === 0
+                                ? <span>No log entries yet</span>
+                                : logLines.map((line, i) => <div key={i}>{line}</div>)
+                            }
+                        </div>
+                    )}
                 </div>
             );
         }
