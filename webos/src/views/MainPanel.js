@@ -482,6 +482,7 @@
             right: 0,
             bottom: 0,
             zIndex: 2,
+            pointerEvents: 'none',
         };
 
         handleOpenPopup() {
@@ -512,6 +513,7 @@
             padding: '16px',
             paddingBottom: '35vh',
             zIndex: 10,
+            pointerEvents: 'none',
         };
 
         render() {
@@ -528,6 +530,7 @@
                         />
                     </video>
                     <div style={this.overlayStyle}>
+                        <div style={{pointerEvents: 'auto'}}>
                         <Popup open={popupOpen} onClose={this.handleClosePopup}>
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                                 <p id="status">{label}</p>
@@ -560,6 +563,7 @@
                                 </Button>
                             </div>
                         </Popup>
+                        </div>
                     </div>
 
                     {logOpen && (
