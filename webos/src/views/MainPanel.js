@@ -39,7 +39,8 @@
                 logOpen: false,
                 settingsButtonVisible: true,
                 installedApps: [],   // [{id, title}]
-                eimDefaultApp: null, // appId string or null = None
+                eimDefaultApp: null, // appId string, '__last_used__', or null = None
+                lastUsedAppId: null, // tracked by service via getForegroundAppInfo
             };
             this.logEndRef = React.createRef();
             this.restartUserActivityTimer();
@@ -233,6 +234,9 @@
                         label = 'Service error';
                     }
                     this.setState({label: label});
+                    if (msg.lastUsedAppId) {
+                        this.setState({lastUsedAppId: msg.lastUsedAppId});
+                    }
                     if (msg.log) {
                         msg.log.forEach(line => this.appendLog('[svc] ' + line));
                     }
@@ -250,16 +254,22 @@
             if (document.hidden) {
                 this.appendLog('App hidden, stopping service');
                 this.stopService();
-                const { eimDefaultApp, installedApps } = this.state;
-                if (eimDefaultApp) {
-                    const app = installedApps.find(a => a.id === eimDefaultApp);
-                    const label = app ? app.title : eimDefaultApp;
+                const { eimDefaultApp, lastUsedAppId, installedApps } = this.state;
+
+                // Resolve effective app: '__last_used__' sentinel → use tracked lastUsedAppId
+                const effectiveAppId = eimDefaultApp === '__last_used__'
+                    ? lastUsedAppId
+                    : eimDefaultApp;
+
+                if (effectiveAppId) {
+                    const app = installedApps.find(a => a.id === effectiveAppId);
+                    const label = app ? app.title : effectiveAppId;
                     this.appendLog('Setting EIM default: ' + label);
                     new LS2Request().send({
                         service: 'luna://com.webos.service.eim/',
                         method: 'addDevice',
                         parameters: {
-                            appId: eimDefaultApp,
+                            appId: effectiveAppId,
                             pigImage: '',
                             mvpdIcon: '',
                             showPopup: false,
@@ -502,17 +512,13 @@
 
         loadApps() {
             new LS2Request().send({
-                service: 'luna://com.webos.applicationManager/',
+                service: 'luna://me.wouterdek.magic4pc.service/',
                 method: 'listApps',
                 parameters: {},
                 onSuccess: (res) => {
                     if (res.apps) {
-                        const apps = res.apps
-                            .filter(a => a.id && a.title)
-                            .map(a => ({ id: a.id, title: a.title }))
-                            .sort((a, b) => a.title.localeCompare(b.title));
-                        this.setState({ installedApps: apps });
-                        this.appendLog('Loaded ' + apps.length + ' apps');
+                        this.setState({ installedApps: res.apps });
+                        this.appendLog('Loaded ' + res.apps.length + ' apps');
                     }
                 },
                 onFailure: (err) => {
@@ -604,16 +610,21 @@
                                         selected={(() => {
                                             const { eimDefaultApp, installedApps } = this.state;
                                             if (!eimDefaultApp) return 0;
+                                            if (eimDefaultApp === '__last_used__') return 1;
                                             const idx = installedApps.findIndex(a => a.id === eimDefaultApp);
-                                            return idx >= 0 ? idx + 1 : 0;
+                                            return idx >= 0 ? idx + 2 : 0;
                                         })()}
                                         onSelect={({selected}) => {
-                                            const app = selected === 0 ? null : this.state.installedApps[selected - 1];
-                                            this.setState({ eimDefaultApp: app ? app.id : null }, () => this.saveSettings());
-                                            this.appendLog('EIM default set to: ' + (app ? app.title : 'None'));
+                                            let newApp = null;
+                                            if (selected === 0) newApp = null;
+                                            else if (selected === 1) newApp = '__last_used__';
+                                            else newApp = this.state.installedApps[selected - 2].id;
+                                            this.setState({ eimDefaultApp: newApp }, () => this.saveSettings());
+                                            const label = selected === 0 ? 'None' : selected === 1 ? 'Last used' : this.state.installedApps[selected - 2].title;
+                                            this.appendLog('EIM default set to: ' + label);
                                         }}
                                     >
-                                        {['None', ...this.state.installedApps.map(a => a.title)]}
+                                        {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
                                     </Dropdown>
                                 </div>
                                 <Button onClick={this.handleToggleLog} size="small">

@@ -283,6 +283,19 @@ function addLog(line) {
 	if (log.length > 200) log.shift();
 }
 
+// Track last used foreground app (excluding magic4pc itself)
+var lastUsedAppId = null;
+service.subscribe(
+	'luna://com.webos.applicationManager/getForegroundAppInfo',
+	{ subscribe: true },
+	function (res) {
+		if (res.returnValue && res.appId && res.appId !== 'me.wouterdek.magic4pc') {
+			lastUsedAppId = res.appId;
+			addLog('foreground app: ' + res.appId);
+		}
+	}
+);
+
 var broadcastAdsActive = false;
 function startBroadcastingAdvertisement() {
 	broadcastAdsActive = true;
@@ -404,6 +417,24 @@ service.register('query', function (message) {
 		broadcastAdsActive: broadcastAdsActive,
 		isConnected: unicastDataActive,
 		unicastRInfo: unicastDataActive ? unicastRInfo : null,
+		lastUsedAppId: lastUsedAppId,
 		log: newLog,
+	});
+});
+
+// Relay listApps through privileged service context (web apps lack applicationManager perms)
+service.register('listApps', function (message) {
+	service.call('luna://com.webos.applicationManager/listApps', {}, function (res) {
+		if (res.returnValue && res.apps) {
+			var apps = res.apps
+				.filter(function(a) { return a.id && a.title && a.visible !== false; })
+				.map(function(a) { return { id: a.id, title: a.title }; })
+				.sort(function(a, b) { return a.title.localeCompare(b.title); });
+			addLog('listApps: returned ' + apps.length + ' apps');
+			message.respond({ returnValue: true, apps: apps });
+		} else {
+			addLog('listApps error: ' + JSON.stringify(res));
+			message.respond({ returnValue: false, apps: [], error: JSON.stringify(res) });
+		}
 	});
 });
