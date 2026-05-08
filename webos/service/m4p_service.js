@@ -137,10 +137,9 @@ function startUnicastingData(client, rinfo, request) {
 				payloadData = buildUpdatePayload(inResponse.payload, settings).toString(
 					'base64'
 				);
-			} catch (ex) {
-				addLog('buildUpdatePayload failed: ' + ex.message);
-				console.info('Payload build failed:', ex);
-				return true;
+				} catch (ex) {
+					// Sensor data may be missing fields (e.g. no coordinate when remote lifted) — ignore silently
+					return true;
 			}
 
 			var msg = {
@@ -275,13 +274,20 @@ function buildUpdatePayload(data, settings) {
 }
 
 var log = [];
+var fs = require('fs');
+
 function addLog(line) {
 	var ts = new Date().toLocaleTimeString();
 	var entry = '[' + ts + '] ' + line;
 	console.log(entry);
 	log.push(entry);
 	if (log.length > 200) log.shift();
+	// Debug: write to file so we can inspect from shell
+	try { fs.appendFileSync('/tmp/m4p_debug.log', entry + '\n'); } catch(e) {}
 }
+
+// Persistent storage directory (survives reboot, writable by service)
+var PERSISTENT_DIR = '/media/developer/apps/usr/palm/services/me.wouterdek.magic4pc.service';
 
 // Track last used foreground app (excluding magic4pc itself)
 var lastUsedAppId = null;
@@ -291,6 +297,7 @@ service.subscribe(
 	function (res) {
 		if (res.returnValue && res.appId && res.appId !== 'me.wouterdek.magic4pc') {
 			lastUsedAppId = res.appId;
+			try { fs.writeFileSync(PERSISTENT_DIR + '/magic4pc-last-app', res.appId); } catch(e) {}
 			addLog('foreground app: ' + res.appId);
 		}
 	}
@@ -355,7 +362,7 @@ service.register('start', function (message) {
 		return;
 	}
 
-	addLog('Service starting');
+	addLog('Service starting v1.1.1');
 	serviceActive = true;
 	service.activityManager.create('keepAlive', function (activity) {
 		keepAliveActivity = activity;
@@ -417,24 +424,87 @@ service.register('query', function (message) {
 		broadcastAdsActive: broadcastAdsActive,
 		isConnected: unicastDataActive,
 		unicastRInfo: unicastDataActive ? unicastRInfo : null,
-		lastUsedAppId: lastUsedAppId,
+		lastUsedAppId: (function() {
+			if (lastUsedAppId) return lastUsedAppId;
+			try { return fs.readFileSync(PERSISTENT_DIR + '/magic4pc-last-app', 'utf8').trim() || null; } catch(e) { return null; }
+		})(),
 		log: newLog,
 	});
 });
 
-// Relay listApps through privileged service context (web apps lack applicationManager perms)
-service.register('listApps', function (message) {
-	service.call('luna://com.webos.applicationManager/dev/listApps', {}, function (res) {
-		if (res.returnValue && res.apps) {
-			var apps = res.apps
-				.filter(function(a) { return a.id && a.title && a.visible !== false; })
-				.map(function(a) { return { id: a.id, title: a.title }; })
-				.sort(function(a, b) { return a.title.localeCompare(b.title); });
-			addLog('listApps: returned ' + apps.length + ' apps');
-			message.respond({ returnValue: true, apps: apps });
-		} else {
-			addLog('listApps error: ' + JSON.stringify(res));
-			message.respond({ returnValue: false, apps: [], error: JSON.stringify(res) });
+// Check if magic4pc should auto-launch default app on startup
+// No state file = fresh boot → should launch
+// After reading, writes 'running' marker to prevent double-launch
+service.register('checkAutoLaunch', function (message) {
+	try {
+		var stateFile = '/tmp/magic4pc-run-state';
+		var isFreshStart = false;
+		try {
+			var runState = fs.readFileSync(stateFile, 'utf8').trim();
+			isFreshStart = (runState !== 'running');
+		} catch(e) {
+			// File doesn't exist = fresh start
+			isFreshStart = true;
 		}
-	});
+		// Mark as running to prevent double-launch
+		try { fs.writeFileSync(stateFile, 'running'); } catch(e) {}
+
+		var appId = null;
+		if (isFreshStart) {
+			try {
+				var chosen = fs.readFileSync(PERSISTENT_DIR + '/magic4pc-settings', 'utf8').trim();
+				if (chosen === '__last_used__') {
+					// try persistent first, fallback to /tmp written by init.d foreground tracker
+					try { chosen = fs.readFileSync(PERSISTENT_DIR + '/magic4pc-last-app', 'utf8').trim(); } catch(e2) { chosen = null; }
+					if (!chosen) {
+						try { chosen = fs.readFileSync('/tmp/magic4pc-last-app', 'utf8').trim(); } catch(e3) { chosen = null; }
+					}
+				}
+				if (chosen && chosen !== 'none' && chosen !== '') {
+					appId = chosen;
+				}
+			} catch(e) {}
+		}
+		addLog('checkAutoLaunch: freshStart=' + isFreshStart + ' appId=' + appId);
+		message.respond({ returnValue: true, shouldLaunch: !!appId, appId: appId, isFreshStart: isFreshStart });
+	} catch(e) {
+		message.respond({ returnValue: false, errorText: e.message });
+	}
+});
+
+// Persist chosen default app (persistent, survives reboot)
+// Values: appId string, '__last_used__', or 'none'
+service.register('setDefaultApp', function (message) {
+	var appId = (message.payload && message.payload.appId) ? message.payload.appId : 'none';
+	try {
+		fs.writeFileSync(PERSISTENT_DIR + '/magic4pc-settings', appId);
+		addLog('setDefaultApp: ' + appId);
+		message.respond({ returnValue: true });
+	} catch (e) {
+		message.respond({ returnValue: false, errorText: e.message });
+	}
+});
+
+// UI log relay — UI calls this to persist log lines to /tmp/m4p_debug.log
+service.register('uiLog', function (message) {
+	var line = (message.payload && message.payload.line) ? message.payload.line : '';
+	addLog('[ui] ' + line);
+	message.respond({ returnValue: true });
+});
+
+// Relay listApps — reads from /tmp/magic4pc-apps.json written by init.d (root, outside jail)
+service.register('listApps', function (message) {
+	try {
+		var raw = JSON.parse(fs.readFileSync('/tmp/magic4pc-apps.json', 'utf8'));
+		var srcApps = (raw.apps) ? raw.apps : [];
+		var apps = srcApps
+			.filter(function(a) { return a.id && a.title && a.visible !== false; })
+			.map(function(a) { return { id: a.id, title: a.title }; })
+			.sort(function(a, b) { return a.title.localeCompare(b.title); });
+		addLog('listApps: returned ' + apps.length + ' apps');
+		message.respond({ returnValue: true, apps: apps });
+	} catch(e) {
+		addLog('listApps: apps file not ready: ' + e.message);
+		message.respond({ returnValue: false, apps: [], error: e.message });
+	}
 });

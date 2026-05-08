@@ -41,6 +41,7 @@
                 installedApps: [],   // [{id, title}]
                 eimDefaultApp: null, // appId string, '__last_used__', or null = None
                 lastUsedAppId: null, // tracked by service via getForegroundAppInfo
+                checkingAutoLaunch: true, // hide UI until we know if we should auto-launch
             };
             this.logEndRef = React.createRef();
             this.logContainerRef = React.createRef();
@@ -104,7 +105,17 @@
             });
         }
 
-        startService() {
+        appendLogPersist(line) {
+            this.appendLog(line);
+            new LS2Request().send({
+                service: 'luna://me.wouterdek.magic4pc.service/',
+                method: 'uiLog',
+                parameters: { line },
+            });
+        }
+
+        startService(retries) {
+            if (retries === undefined) retries = 10;
             console.log('Requesting service start');
             this.appendLog('Starting service...');
             new LS2Request().send({
@@ -121,7 +132,12 @@
                     const msg = 'Service start error: ' + JSON.stringify(inError);
                     console.log(msg);
                     this.appendLog(msg);
-                    this.setState({label: 'Service start error'});
+                    if (retries > 0) {
+                        this.appendLog('Retrying service start in 3s...');
+                        setTimeout(() => this.startService(retries - 1), 3000);
+                    } else {
+                        this.setState({label: 'Service start error'});
+                    }
                     return;
                 },
             });
@@ -255,7 +271,7 @@
 
         onVisibilityChange() {
             if (document.hidden) {
-                this.appendLog('App hidden, stopping service');
+                this.appendLogPersist('App hidden, stopping service');
                 this.stopService();
                 const { eimDefaultApp, lastUsedAppId, installedApps } = this.state;
 
@@ -267,7 +283,7 @@
                 if (effectiveAppId) {
                     const app = installedApps.find(a => a.id === effectiveAppId);
                     const label = app ? app.title : effectiveAppId;
-                    this.appendLog('Setting EIM default: ' + label);
+                    this.appendLogPersist('Registering default app in EIM: ' + label);
                     new LS2Request().send({
                         service: 'luna://com.webos.service.eim/',
                         method: 'addDevice',
@@ -278,14 +294,14 @@
                             showPopup: false,
                             label: label,
                         },
-                        onSuccess: () => this.appendLog('EIM default set OK'),
-                        onFailure: (err) => this.appendLog('EIM default error: ' + JSON.stringify(err)),
+                        onSuccess: () => this.appendLogPersist('EIM addDevice OK: ' + effectiveAppId),
+                        onFailure: (err) => this.appendLogPersist('EIM addDevice error: ' + JSON.stringify(err)),
                     });
                 } else {
-                    this.unregisterEIM();
+                    this.appendLogPersist('No EIM default app set');
                 }
             } else {
-                this.appendLog('App visible, starting service');
+                this.appendLogPersist('App visible, starting service');
                 this.registerEIM();
                 this.startService();
             }
@@ -396,6 +412,30 @@
 
             // Auto-register as EIM device so system keys reach the app
             this.registerEIM();
+
+            // Check if we should auto-launch default app on boot/wakeup
+            // Always call checkAutoLaunch; if shouldLaunch — launch regardless of visibility
+            new LS2Request().send({
+                service: 'luna://me.wouterdek.magic4pc.service/',
+                method: 'checkAutoLaunch',
+                parameters: {},
+                onSuccess: (res) => {
+                    this.setState({ checkingAutoLaunch: false });
+                    if (res.shouldLaunch && res.appId) {
+                        this.appendLogPersist('Auto-launch: ' + res.appId);
+                        new LS2Request().send({
+                            service: 'luna://com.webos.applicationManager/',
+                            method: 'launch',
+                            parameters: { id: res.appId },
+                            onSuccess: () => this.appendLogPersist('Auto-launch OK: ' + res.appId),
+                            onFailure: (err) => this.appendLogPersist('Auto-launch error: ' + JSON.stringify(err)),
+                        });
+                    }
+                },
+                onFailure: () => {
+                    this.setState({ checkingAutoLaunch: false });
+                },
+            });
 
             // Start service immediately on mount; loadApps() is called after service starts
             this.startService();
@@ -525,22 +565,25 @@
         }
 
         loadApps(retries) {
-            if (retries === undefined) retries = 3;
+            if (retries === undefined) retries = 15;
             new LS2Request().send({
                 service: 'luna://me.wouterdek.magic4pc.service/',
                 method: 'listApps',
                 parameters: {},
                 onSuccess: (res) => {
-                    if (res.apps) {
+                    if (res.apps && res.apps.length > 0) {
                         this.setState({ installedApps: res.apps });
                         this.appendLog('Loaded ' + res.apps.length + ' apps');
+                    } else if (retries > 0) {
+                        // Empty list — init.d may still be generating the file
+                        setTimeout(() => this.loadApps(retries - 1), 3000);
                     }
                 },
                 onFailure: (err) => {
                     this.appendLog('listApps error: ' + JSON.stringify(err));
                     if (retries > 0) {
-                        this.appendLog('Retrying listApps in 2s...');
-                        setTimeout(() => this.loadApps(retries - 1), 2000);
+                        this.appendLog('Retrying listApps in 3s...');
+                        setTimeout(() => this.loadApps(retries - 1), 3000);
                     }
                 },
             });
@@ -585,16 +628,18 @@
             overflowY: 'auto',
             padding: '16px',
             wordBreak: 'break-all',
+            overflowX: 'hidden',
+            whiteSpace: 'pre-wrap',
             zIndex: 10,
             pointerEvents: 'none',
         };
 
         render() {
-            const {logOpen, logLines, label, popupOpen, videoSource, settingsButtonVisible} = this.state;
+            const {logOpen, logLines, label, popupOpen, videoSource, settingsButtonVisible, checkingAutoLaunch} = this.state;
             const version = '1.1.0 (' + process.env.BUILD_DATE + ')';
 
             return (
-                <div>
+                <div style={checkingAutoLaunch ? {visibility: 'hidden'} : {}}>
                     <video id="vidElem" autoPlay>
                         <source
                             id="vidSrcElem"
@@ -641,6 +686,12 @@
                                             this.setState({ eimDefaultApp: newApp }, () => this.saveSettings());
                                             const label = selected === 0 ? 'None' : selected === 1 ? 'Last used' : this.state.installedApps[selected - 2].title;
                                             this.appendLog('EIM default set to: ' + label);
+                                            // Persist to file so init.d can read it on power-on
+                                            new LS2Request().send({
+                                                service: 'luna://me.wouterdek.magic4pc.service/',
+                                                method: 'setDefaultApp',
+                                                parameters: { appId: newApp || 'none' },
+                                            });
                                         }}
                                     >
                                         {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
