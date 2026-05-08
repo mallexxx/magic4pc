@@ -297,7 +297,10 @@
 
         onMouse(e) {
             console.log(e.type);
-
+            // Don't forward clicks when popup is open
+            if (this.state.popupOpen) {
+                return;
+            }
             new LS2Request().send({
                 service: 'luna://me.wouterdek.magic4pc.service/',
                 method: 'onMouse',
@@ -576,6 +579,7 @@
             fontSize: '0.75em',
             overflowY: 'auto',
             padding: '16px',
+            wordBreak: 'break-all',
             zIndex: 10,
             pointerEvents: 'none',
         };
@@ -645,7 +649,7 @@
                         </div>
                     </div>
 
-                    {(logOpen || popupOpen) && (
+                    {logOpen && (
                         <div ref={this.logContainerRef} style={{
                             ...this.logPanelStyle,
                             paddingBottom: popupOpen ? '50vh' : '16px',
