@@ -6,6 +6,7 @@ APP=me.wouterdek.magic4pc
 IPK=me.wouterdek.magic4pc_1.1.0_all.ipk
 TV=root@192.168.1.75
 ARES_PACKAGE=/Users/admin/webOS_TV_SDK/CLI/bin/ares-package
+LUNA=/Users/admin/Automations/tv-luna-send.sh
 
 cd "$(dirname "$0")"
 
@@ -19,10 +20,10 @@ echo "==> Copying to TV..."
 scp "$IPK" "$TV:/tmp/magic4pc.ipk"
 
 echo "==> Closing app..."
-ssh "$TV" "script -q -c \"luna-send -n 1 -f luna://com.webos.service.applicationmanager/closeByAppId '{\\\"id\\\":\\\"$APP\\\"}'\" /tmp/o.txt; cat /tmp/o.txt" || true
+$LUNA -n 1 -f "luna://com.webos.service.applicationmanager/closeByAppId" "{\"id\":\"$APP\"}" || true
 
 echo "==> Removing old version..."
-ssh "$TV" "script -q -c \"luna-send -n 1 -f luna://com.webos.appInstallService/dev/remove '{\\\"id\\\":\\\"$APP\\\"}'\" /tmp/o.txt; cat /tmp/o.txt" || true
+$LUNA -n 1 -f "luna://com.webos.appInstallService/dev/remove" "{\"id\":\"$APP\"}" || true
 sleep 2
 
 echo "==> Installing (waiting for 'installed')..."
@@ -31,9 +32,9 @@ ssh "$TV" "script -q -c \"luna-send -i -f luna://com.webos.appInstallService/dev
     sleep 1
     grep -q '\"state\":\"installed\"' /tmp/install.txt 2>/dev/null && break
   done
-  kill %1 2>/dev/null; cat /tmp/install.txt"
+  kill %1 2>/dev/null; grep -v '^Script ' /tmp/install.txt; rm -f /tmp/install.txt"
 
 echo "==> Launching..."
-ssh "$TV" "script -q -c \"luna-send -n 1 -f luna://com.webos.applicationManager/launch '{\\\"id\\\":\\\"$APP\\\"}'\" /tmp/o.txt; cat /tmp/o.txt"
+$LUNA -n 1 -f "luna://com.webos.applicationManager/launch" "{\"id\":\"$APP\"}"
 
 echo "==> Done."
