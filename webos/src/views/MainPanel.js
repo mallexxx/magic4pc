@@ -273,33 +273,6 @@
             if (document.hidden) {
                 this.appendLogPersist('App hidden, stopping service');
                 this.stopService();
-                const { eimDefaultApp, lastUsedAppId, installedApps } = this.state;
-
-                // Resolve effective app: '__last_used__' sentinel → use tracked lastUsedAppId
-                const effectiveAppId = eimDefaultApp === '__last_used__'
-                    ? lastUsedAppId
-                    : eimDefaultApp;
-
-                if (effectiveAppId) {
-                    const app = installedApps.find(a => a.id === effectiveAppId);
-                    const label = app ? app.title : effectiveAppId;
-                    this.appendLogPersist('Registering default app in EIM: ' + label);
-                    new LS2Request().send({
-                        service: 'luna://com.webos.service.eim/',
-                        method: 'addDevice',
-                        parameters: {
-                            appId: effectiveAppId,
-                            pigImage: '',
-                            mvpdIcon: '',
-                            showPopup: false,
-                            label: label,
-                        },
-                        onSuccess: () => this.appendLogPersist('EIM addDevice OK: ' + effectiveAppId),
-                        onFailure: (err) => this.appendLogPersist('EIM addDevice error: ' + JSON.stringify(err)),
-                    });
-                } else {
-                    this.appendLogPersist('No EIM default app set');
-                }
             } else {
                 this.appendLogPersist('App visible, starting service');
                 this.registerEIM();
@@ -421,6 +394,10 @@
                 parameters: {},
                 onSuccess: (res) => {
                     this.setState({ checkingAutoLaunch: false });
+                    // If default is __last_used__, seed lastUsedAppId from the resolved appId
+                    if (res.resolvedAppId && this.state.eimDefaultApp === '__last_used__') {
+                        this.setState({ lastUsedAppId: res.resolvedAppId });
+                    }
                     if (res.shouldLaunch && res.appId) {
                         this.appendLogPersist('Auto-launch: ' + res.appId);
                         new LS2Request().send({

@@ -355,12 +355,14 @@ function startBroadcastingAdvertisement() {
 
 var serviceActive = false;
 var keepAliveActivity = null;
+var pendingStart = false;
 service.register('start', function (message) {
 	if (serviceActive) {
 		addLog('start called but already active');
 		message.respond({});
 		return;
 	}
+	pendingStart = true;
 
 	addLog('Service starting v1.1.1');
 	serviceActive = true;
@@ -370,6 +372,7 @@ service.register('start', function (message) {
 	});
 	startBroadcastingAdvertisement();
 	addLog('Broadcasting started');
+	pendingStart = false;
 	message.respond({});
 });
 
@@ -415,6 +418,18 @@ service.register('stop', function (message) {
 	unicastDataActive = false;
 	addLog('Service stopped');
 	message.respond({});
+	// If start was called while stop was in-flight, honour it now
+	if (pendingStart) {
+		pendingStart = false;
+		addLog('Executing deferred start after stop');
+		serviceActive = true;
+		service.activityManager.create('keepAlive', function (activity) {
+			keepAliveActivity = activity;
+			addLog('keepAlive activity created');
+		});
+		startBroadcastingAdvertisement();
+		addLog('Broadcasting started');
+	}
 });
 
 service.register('query', function (message) {
@@ -450,23 +465,25 @@ service.register('checkAutoLaunch', function (message) {
 		try { fs.writeFileSync(stateFile, 'running'); } catch(e) {}
 
 		var appId = null;
+		var resolvedAppId = null;
+		try {
+			var chosen = fs.readFileSync(PERSISTENT_DIR + '/magic4pc-settings', 'utf8').trim();
+			if (chosen === '__last_used__') {
+				try { chosen = fs.readFileSync(PERSISTENT_DIR + '/magic4pc-last-app', 'utf8').trim(); } catch(e2) { chosen = null; }
+				if (!chosen) {
+					try { chosen = fs.readFileSync('/tmp/magic4pc-last-app', 'utf8').trim(); } catch(e3) { chosen = null; }
+				}
+			}
+			if (chosen && chosen !== 'none' && chosen !== '' && chosen !== 'me.wouterdek.magic4pc') {
+				resolvedAppId = chosen;
+			}
+		} catch(e) {}
+
 		if (isFreshStart) {
-			try {
-				var chosen = fs.readFileSync(PERSISTENT_DIR + '/magic4pc-settings', 'utf8').trim();
-				if (chosen === '__last_used__') {
-					// try persistent first, fallback to /tmp written by init.d foreground tracker
-					try { chosen = fs.readFileSync(PERSISTENT_DIR + '/magic4pc-last-app', 'utf8').trim(); } catch(e2) { chosen = null; }
-					if (!chosen) {
-						try { chosen = fs.readFileSync('/tmp/magic4pc-last-app', 'utf8').trim(); } catch(e3) { chosen = null; }
-					}
-				}
-				if (chosen && chosen !== 'none' && chosen !== '' && chosen !== 'me.wouterdek.magic4pc') {
-					appId = chosen;
-				}
-			} catch(e) {}
+			appId = resolvedAppId;
 		}
 		addLog('checkAutoLaunch: freshStart=' + isFreshStart + ' appId=' + appId);
-		message.respond({ returnValue: true, shouldLaunch: !!appId, appId: appId, isFreshStart: isFreshStart });
+		message.respond({ returnValue: true, shouldLaunch: !!appId, appId: appId, resolvedAppId: resolvedAppId, isFreshStart: isFreshStart });
 	} catch(e) {
 		message.respond({ returnValue: false, errorText: e.message });
 	}
