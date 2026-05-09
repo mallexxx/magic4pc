@@ -680,7 +680,7 @@
                                     <span style={{opacity: 0.5, fontSize: '0.8em'}}>v{version}</span>
                                 </span>
                             </div>
-                            <div>
+                            <div style={{display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5em'}}>
                                 <Dropdown
                                     defaultSelected={this.inputSources.indexOf(videoSource)}
                                     title="Input source"
@@ -694,58 +694,56 @@
                                 <Button onClick={this.stopService} size="small">
                                     Disable
                                 </Button>
-                                <div style={{display: 'inline-flex', alignItems: 'center', gap: '0.5em', verticalAlign: 'middle'}}>
-                                    <div style={{width: '16em'}}>
-                                        <Dropdown
-                                            title="Default app on exit"
-                                            selected={(() => {
-                                                const { eimDefaultApp, installedApps } = this.state;
-                                                if (!eimDefaultApp) return 0;
-                                                if (eimDefaultApp === '__last_used__') return 1;
-                                                const idx = installedApps.findIndex(a => a.id === eimDefaultApp);
-                                                return idx >= 0 ? idx + 2 : 0;
-                                            })()}
-                                            onSelect={({selected}) => {
-                                                let newApp = null;
-                                                if (selected === 0) newApp = null;
-                                                else if (selected === 1) newApp = '__last_used__';
-                                                else newApp = this.state.installedApps[selected - 2].id;
-                                                this.setState({ eimDefaultApp: newApp }, () => this.saveSettings());
-                                                const label = selected === 0 ? 'None' : selected === 1 ? 'Last used' : this.state.installedApps[selected - 2].title;
-                                                this.appendLog('EIM default set to: ' + label);
-                                                new LS2Request().send({
-                                                    service: 'luna://me.wouterdek.magic4pc.service/',
-                                                    method: 'setDefaultApp',
-                                                    parameters: { appId: newApp || 'none' },
-                                                });
-                                            }}
-                                        >
-                                            {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
-                                        </Dropdown>
-                                    </div>
-                                    <div style={{display: 'inline-flex', flexDirection: 'column', gap: '0.2em'}}>
-                                        <label style={{fontSize: '0.75em', opacity: 0.7}}>
-                                            WoL MAC
-                                            {this.state.wolMacValid === null && <span style={{opacity: 0.5}}> – disabled</span>}
-                                            {this.state.wolMacValid === false && <span style={{color: '#f66'}}> – invalid</span>}
-                                            {this.state.wolMacValid === true && <span style={{color: '#6f6'}}> – active</span>}
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="XX:XX:XX:XX:XX:XX"
-                                            value={this.state.wolMac}
-                                            onChange={this.onWolMacChange}
-                                            style={{
-                                                background: 'rgba(255,255,255,0.1)',
-                                                border: '1px solid ' + (this.state.wolMacValid === false ? '#f66' : this.state.wolMacValid === true ? '#6f6' : 'rgba(255,255,255,0.3)'),
-                                                color: '#fff',
-                                                padding: '0.3em 0.5em',
-                                                fontSize: '0.85em',
-                                                borderRadius: '4px',
-                                                width: '12em',
-                                            }}
-                                        />
-                                    </div>
+                                <div style={{width: '16em'}}>
+                                    <Dropdown
+                                        title="Default app on exit"
+                                        selected={(() => {
+                                            const { eimDefaultApp, installedApps } = this.state;
+                                            if (!eimDefaultApp) return 0;
+                                            if (eimDefaultApp === '__last_used__') return 1;
+                                            const idx = installedApps.findIndex(a => a.id === eimDefaultApp);
+                                            return idx >= 0 ? idx + 2 : 0;
+                                        })()}
+                                        onSelect={({selected}) => {
+                                            let newApp = null;
+                                            if (selected === 0) newApp = null;
+                                            else if (selected === 1) newApp = '__last_used__';
+                                            else newApp = this.state.installedApps[selected - 2].id;
+                                            this.setState({ eimDefaultApp: newApp }, () => this.saveSettings());
+                                            const label = selected === 0 ? 'None' : selected === 1 ? 'Last used' : this.state.installedApps[selected - 2].title;
+                                            this.appendLog('EIM default set to: ' + label);
+                                            new LS2Request().send({
+                                                service: 'luna://me.wouterdek.magic4pc.service/',
+                                                method: 'setDefaultApp',
+                                                parameters: { appId: newApp || 'none' },
+                                            });
+                                        }}
+                                    >
+                                        {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
+                                    </Dropdown>
+                                </div>
+                                <div style={{display: 'inline-flex', flexDirection: 'column', gap: '0.2em'}}>
+                                    <label style={{fontSize: '0.75em', opacity: 0.7}}>
+                                        WoL MAC
+                                        {this.state.wolMacValid === null && <span style={{opacity: 0.5}}> – disabled</span>}
+                                        {this.state.wolMacValid === false && <span style={{color: '#f66'}}> – invalid</span>}
+                                        {this.state.wolMacValid === true && <span style={{color: '#6f6'}}> – active</span>}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="XX:XX:XX:XX:XX:XX"
+                                        value={this.state.wolMac}
+                                        onChange={this.onWolMacChange}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.1)',
+                                            border: '1px solid ' + (this.state.wolMacValid === false ? '#f66' : this.state.wolMacValid === true ? '#6f6' : 'rgba(255,255,255,0.3)'),
+                                            color: '#fff',
+                                            padding: '0.3em 0.5em',
+                                            fontSize: '0.85em',
+                                            borderRadius: '4px',
+                                            width: '12em',
+                                        }}
+                                    />
                                 </div>
                             </div>
                         </Popup>
