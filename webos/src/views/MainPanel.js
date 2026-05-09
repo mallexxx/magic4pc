@@ -703,7 +703,7 @@
                                     <span style={{opacity: 0.5, fontSize: '0.8em'}}>v{version}</span>
                                 </span>
                             </div>
-                            <div style={{display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: '0.5em'}}>
+                            <div style={{display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5em'}}>
                                 <Dropdown
                                     defaultSelected={this.inputSources.indexOf(videoSource)}
                                     title="Input source"
@@ -745,8 +745,11 @@
                                         {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
                                     </Dropdown>
                                 </div>
-                                <div style={{display: 'flex', flexDirection: 'column', gap: '0.2em'}}>
-                                    <label style={{fontSize: '0.75em', opacity: 0.7}}>
+                                <div style={{position: 'relative', paddingTop: '1.4em'}}>
+                                    <label style={{
+                                        position: 'absolute', top: 0, left: 0,
+                                        fontSize: '0.75em', opacity: 0.7, whiteSpace: 'nowrap'
+                                    }}>
                                         WoL MAC
                                         {this.state.wolMacValid === null && <span style={{opacity: 0.5}}> – disabled</span>}
                                         {this.state.wolMacValid === false && <span style={{color: '#f66'}}> – invalid</span>}
@@ -757,6 +760,8 @@
                                         placeholder="XX:XX:XX:XX:XX:XX"
                                         value={this.state.wolMac}
                                         onChange={this.onWolMacChange}
+                                        onFocus={() => this.setState({ keyboardOffset: 400 })}
+                                        onBlur={() => this.setState({ keyboardOffset: 0 })}
                                         style={{
                                             background: 'rgba(255,255,255,0.1)',
                                             border: '1px solid ' + (this.state.wolMacValid === false ? '#f66' : this.state.wolMacValid === true ? '#6f6' : 'rgba(255,255,255,0.3)'),
@@ -765,6 +770,7 @@
                                             fontSize: '0.85em',
                                             borderRadius: '4px',
                                             width: '12em',
+                                            display: 'block',
                                         }}
                                     />
                                 </div>
