@@ -280,10 +280,22 @@
             if (document.hidden) {
                 this.appendLogPersist('App hidden, stopping service');
                 this.stopService();
+                // Stop WoL immediately — don't wake HTPC when magic4pc is in background
+                new LS2Request().send({
+                    service: 'luna://me.wouterdek.magic4pc.service/',
+                    method: 'setWolActive',
+                    parameters: { active: false },
+                });
             } else {
                 this.appendLogPersist('App visible, starting service');
                 this.registerEIM();
                 this.startService();
+                // Resume WoL when magic4pc comes back to foreground
+                new LS2Request().send({
+                    service: 'luna://me.wouterdek.magic4pc.service/',
+                    method: 'setWolActive',
+                    parameters: { active: true },
+                });
             }
         }
 
@@ -682,8 +694,8 @@
                                 <Button onClick={this.stopService} size="small">
                                     Disable
                                 </Button>
-                                <div style={{display: 'flex', alignItems: 'flex-end', gap: '1em'}}>
-                                    <div style={{width: '20em'}}>
+                                <div style={{display: 'inline-flex', alignItems: 'center', gap: '0.5em', verticalAlign: 'middle'}}>
+                                    <div style={{width: '16em'}}>
                                         <Dropdown
                                             title="Default app on exit"
                                             selected={(() => {
@@ -701,7 +713,6 @@
                                                 this.setState({ eimDefaultApp: newApp }, () => this.saveSettings());
                                                 const label = selected === 0 ? 'None' : selected === 1 ? 'Last used' : this.state.installedApps[selected - 2].title;
                                                 this.appendLog('EIM default set to: ' + label);
-                                                // Persist to file so init.d can read it on power-on
                                                 new LS2Request().send({
                                                     service: 'luna://me.wouterdek.magic4pc.service/',
                                                     method: 'setDefaultApp',
@@ -712,9 +723,9 @@
                                             {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
                                         </Dropdown>
                                     </div>
-                                    <div style={{display: 'flex', flexDirection: 'column', gap: '0.3em'}}>
-                                        <label style={{fontSize: '0.8em', opacity: 0.7}}>
-                                            Wake-on-LAN MAC
+                                    <div style={{display: 'inline-flex', flexDirection: 'column', gap: '0.2em'}}>
+                                        <label style={{fontSize: '0.75em', opacity: 0.7}}>
+                                            WoL MAC
                                             {this.state.wolMacValid === null && <span style={{opacity: 0.5}}> – disabled</span>}
                                             {this.state.wolMacValid === false && <span style={{color: '#f66'}}> – invalid</span>}
                                             {this.state.wolMacValid === true && <span style={{color: '#6f6'}}> – active</span>}
@@ -728,10 +739,10 @@
                                                 background: 'rgba(255,255,255,0.1)',
                                                 border: '1px solid ' + (this.state.wolMacValid === false ? '#f66' : this.state.wolMacValid === true ? '#6f6' : 'rgba(255,255,255,0.3)'),
                                                 color: '#fff',
-                                                padding: '0.4em 0.6em',
-                                                fontSize: '0.9em',
+                                                padding: '0.3em 0.5em',
+                                                fontSize: '0.85em',
                                                 borderRadius: '4px',
-                                                width: '14em',
+                                                width: '12em',
                                             }}
                                         />
                                     </div>

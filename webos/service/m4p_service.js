@@ -564,6 +564,17 @@ service.register('setDefaultApp', function (message) {
 	}
 });
 
+// Control WoL from UI visibility changes
+service.register('setWolActive', function (message) {
+	var active = message.payload && message.payload.active;
+	if (active) {
+		if (serviceActive && !unicastDataActive) startWol();
+	} else {
+		stopWol();
+	}
+	message.respond({ returnValue: true });
+});
+
 // Persist WoL MAC address
 service.register('setWolMac', function (message) {
 	var mac = (message.payload && message.payload.mac) ? message.payload.mac.trim() : '';
