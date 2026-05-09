@@ -2,6 +2,7 @@
 
     import Button from '@enact/sandstone/Button';
     import {Dropdown} from '@enact/sandstone/Dropdown';
+    import {Input} from '@enact/sandstone/Input';
     import Popup from '@enact/sandstone/Popup';
     import LS2Request from '@enact/webos/LS2Request';
     import React from 'react';
@@ -693,7 +694,7 @@
                     </video>
                     <div style={this.overlayStyle}>
                         <div style={{pointerEvents: 'auto'}}>
-                        <Popup open={popupOpen} onClose={this.handleClosePopup} noAutoDismiss style={keyboardOffset > 0 ? {marginBottom: keyboardOffset + 'px', transition: 'margin-bottom 0.2s ease'} : {transition: 'margin-bottom 0.2s ease'}}>
+                        <Popup open={popupOpen} onClose={this.handleClosePopup} style={keyboardOffset > 0 ? {marginBottom: keyboardOffset + 'px', transition: 'margin-bottom 0.2s ease'} : {transition: 'margin-bottom 0.2s ease'}}>
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                                 <p id="status">{label}</p>
                                 <span style={{display: 'flex', alignItems: 'center', gap: '1em'}}>
@@ -741,33 +742,16 @@
                                         {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
                                     </Dropdown>
                                 </div>
-                                <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} style={{position: 'relative', paddingTop: '1.4em'}}>
-                                    <label style={{
-                                        position: 'absolute', top: 0, left: 0,
-                                        fontSize: '0.75em', opacity: 0.7, whiteSpace: 'nowrap'
-                                    }}>
-                                        WoL MAC
-                                        {this.state.wolMacValid === null && <span style={{opacity: 0.5}}> – disabled</span>}
-                                        {this.state.wolMacValid === false && <span style={{color: '#f66'}}> – invalid</span>}
-                                        {this.state.wolMacValid === true && <span style={{color: '#6f6'}}> – active</span>}
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="XX:XX:XX:XX:XX:XX"
-                                        value={this.state.wolMac}
-                                        onChange={this.onWolMacChange}
-                                        style={{
-                                            background: 'rgba(255,255,255,0.1)',
-                                            border: '1px solid ' + (this.state.wolMacValid === false ? '#f66' : this.state.wolMacValid === true ? '#6f6' : 'rgba(255,255,255,0.3)'),
-                                            color: '#fff',
-                                            padding: '0.3em 0.5em',
-                                            fontSize: '0.85em',
-                                            borderRadius: '4px',
-                                            width: '12em',
-                                            display: 'block',
-                                        }}
-                                    />
-                                </div>
+                                <Input
+                                    title="WoL MAC"
+                                    placeholder="XX:XX:XX:XX:XX:XX"
+                                    value={this.state.wolMac}
+                                    invalid={this.state.wolMacValid === false}
+                                    invalidMessage="Invalid MAC address"
+                                    subtitle={this.state.wolMacValid === null ? 'disabled' : this.state.wolMacValid === true ? 'active' : null}
+                                    onChange={({value}) => this.onWolMacChange({target: {value}})}
+                                    size="small"
+                                />
                             </div>
                         </Popup>
                         </div>
