@@ -25,11 +25,19 @@ track_foreground() {
             echo "$appId" > /tmp/magic4pc-foreground
             # Only save non-EIM apps as last-app (and not magic4pc itself)
             case "$appId" in
-                com.webos.app.hdmi[0-9]|com.webos.app.externalinput.*|com.webos.app.livetv|me.wouterdek.magic4pc)
+                com.webos.app.hdmi[0-9]|com.webos.app.externalinput.*|com.webos.app.livetv)
                     # EIM source is active — mark as already running so magic4pc won't auto-launch
-                    if [ "$appId" != "me.wouterdek.magic4pc" ] && [ ! -f "$RUN_STATE" ]; then
+                    if [ ! -f "$RUN_STATE" ]; then
                         echo "running" > "$RUN_STATE"
                         echo "[magic4pc init] EIM foreground=$appId, set run-state" >> /tmp/m4p_debug.log
+                    fi
+                    ;;
+                me.wouterdek.magic4pc)
+                    # Only skip writing to last-app on fresh launch (no state file)
+                    # If state file exists — write magic4pc so next wake won't auto-launch old app
+                    if [ -f "$RUN_STATE" ]; then
+                        echo "$appId" > /tmp/magic4pc-last-app
+                        cp /tmp/magic4pc-last-app /media/developer/apps/usr/palm/services/me.wouterdek.magic4pc.service/magic4pc-last-app 2>/dev/null
                     fi
                     ;;
                 *)
