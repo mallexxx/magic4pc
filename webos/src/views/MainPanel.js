@@ -34,6 +34,7 @@
             this.onWolMacChange = this.onWolMacChange.bind(this);
             this.onKeyboardShow = this.onKeyboardShow.bind(this);
             this.onKeyboardHide = this.onKeyboardHide.bind(this);
+            this.onKeyCapture = this.onKeyCapture.bind(this);
 
             this.state = {
                 label: '',
@@ -48,6 +49,7 @@
                 checkingAutoLaunch: true,
                 wolMac: '',
                 wolMacValid: null,
+                wolMacActive: false,
                 keyboardOffset: 0,  // px to shift popup up when keyboard is visible
             };
             this.logEndRef = React.createRef();
@@ -183,6 +185,11 @@
             // While settings panel is open: Back or Blue closes it, LIST toggles log, other keys blocked
             if (this.state.popupOpen) {
                 if (event.keyCode === 461 /* BACK */ || event.keyCode === 406 /* BLUE */) {
+                    if (this.state.wolMacActive || this._kbWasOpen) {
+                        // keyboard open or just closed — eat this Back, don't close panel
+                        this._kbWasOpen = false;
+                        return;
+                    }
                     this.handleClosePopup();
                 } else if (event.keyCode === 1006 /* LIST */) {
                     this.handleToggleLog();
@@ -391,6 +398,8 @@
         componentDidMount() {
             document.addEventListener('keydown', this.onButtonDown, false);
             document.addEventListener('keyup', this.onButtonUp, false);
+            // Capture-phase listener: intercepts Back before WebOS keyboard UI consumes it
+            window.addEventListener('keydown', this.onKeyCapture, true);
             document.addEventListener(
                 'visibilitychange',
                 this.onVisibilityChange,
@@ -407,9 +416,30 @@
             if (window.visualViewport) {
                 window.visualViewport.addEventListener('resize', () => {
                     const kbHeight = window.innerHeight - window.visualViewport.height;
-                    this.setState({ keyboardOffset: kbHeight > 50 ? kbHeight : 0 });
+                    if (kbHeight > 50) {
+                        this.setState({ keyboardOffset: kbHeight });
+                        this.appendLog('[wol] viewport resize: kb shown, kbHeight=' + kbHeight);
+                    } else {
+                        // Keyboard hidden — reset both offset and active flag
+                        // (onDeactivate may not fire on WebOS when keyboard closes via system Back)
+                        this.appendLog('[wol] viewport resize: kb hidden, resetting wolMacActive');
+                        this.setState({ keyboardOffset: 0, wolMacActive: false });
+                    }
                 });
             }
+            // Poll document.activeElement to detect when WoL input loses focus
+            // (keyboard hide via Back is consumed by system — DOM keydown never fires,
+            //  webOS.keyboard API not available on this TV)
+            this._kbWasVisible = false;
+            this._kbPollInterval = setInterval(() => {
+                const active = document.activeElement;
+                const tag = active ? active.tagName : 'none';
+                const isInputActive = active && (tag === 'INPUT' || tag === 'TEXTAREA');
+                if (this.state.wolMacActive && !isInputActive) {
+                    this.appendLogPersist('[wol] poll: input lost focus (activeElement=' + tag + ') → resetting wolMacActive');
+                    this.setState({ wolMacActive: false });
+                }
+            }, 300);
             this.loadSettings();
 
             // Auto-register as EIM device so system keys reach the app
@@ -498,6 +528,16 @@
             this.setState({ keyboardOffset: 0 });
         }
 
+        onKeyCapture(event) {
+            // Fires in capture phase — before WebOS keyboard UI can consume Back
+            if (event.keyCode === 461 /* BACK */ && this.state.wolMacActive) {
+                this.appendLog('[wol] Back captured, wolMacActive=true → resetting');
+                this.setState({ wolMacActive: false });
+                // Don't stopPropagation — let Input handle closing the fullscreen overlay
+            }
+        }
+
+
         validateMac(mac) {
             return /^([0-9a-fA-F]{2}[:\-]){5}[0-9a-fA-F]{2}$/.test(mac.trim());
         }
@@ -526,6 +566,7 @@
         componentWillUnmount() {
             document.removeEventListener('keydown', this.onButtonPress, false);
             document.removeEventListener('keyup', this.onButtonPress, false);
+            window.removeEventListener('keydown', this.onKeyCapture, true);
             document.removeEventListener(
                 'visibilitychange',
                 this.onVisibilityChange,
@@ -537,6 +578,10 @@
                 false
             );
             this.unregisterEIM();
+            if (this._kbPollInterval) {
+                clearInterval(this._kbPollInterval);
+                this._kbPollInterval = null;
+            }
         }
 
         inputSourceLabels = [
@@ -698,25 +743,33 @@
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                                 <p id="status">{label}</p>
                                 <span style={{display: 'flex', alignItems: 'center', gap: '1em'}}>
+                                    <span style={{opacity: 0.5, fontSize: '0.8em'}}>v{version}</span>
                                     <Button onClick={this.handleToggleLog} size="small">
                                         {logOpen ? 'Hide Log' : 'Show Log'}
                                     </Button>
-                                    <span style={{opacity: 0.5, fontSize: '0.8em'}}>v{version}</span>
                                 </span>
                             </div>
-                            <div style={{display: 'grid', gridTemplateColumns: 'auto auto auto 1fr auto', alignItems: 'center', gap: '0.5em'}}>
-                                <Dropdown
-                                    defaultSelected={this.inputSources.indexOf(videoSource)}
-                                    title="Input source"
-                                    onSelect={this.onInputSourceSelected}
-                                >
-                                    {this.inputSourceLabels}
-                                </Dropdown>
-                                <Button onClick={this.startService} size="small">Enable</Button>
-                                <Button onClick={this.stopService} size="small">Disable</Button>
-                                <div>
+                            <div style={{display: 'grid', gridTemplateColumns: 'auto auto auto 1fr auto', alignItems: 'start', gap: '0.5em 0.5em'}}>
+                                <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+                                    <span style={{fontSize: '0.75em', fontStyle: 'italic', opacity: 0.7, paddingBottom: '0.2em'}}>Input source</span>
                                     <Dropdown
-                                        title="Default app on exit"
+                                        defaultSelected={this.inputSources.indexOf(videoSource)}
+                                        onSelect={this.onInputSourceSelected}
+                                    >
+                                        {this.inputSourceLabels}
+                                    </Dropdown>
+                                </div>
+                                <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+                                    <span style={{fontSize: '0.75em', fontStyle: 'italic', opacity: 0.7, paddingBottom: '0.2em'}}>Enable</span>
+                                    <Button onClick={this.startService} size="small">Enable</Button>
+                                </div>
+                                <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+                                    <span style={{fontSize: '0.75em', fontStyle: 'italic', opacity: 0.7, paddingBottom: '0.2em'}}>Disable</span>
+                                    <Button onClick={this.stopService} size="small">Disable</Button>
+                                </div>
+                                <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+                                    <span style={{fontSize: '0.75em', fontStyle: 'italic', opacity: 0.7, paddingBottom: '0.2em'}}>Default app on exit</span>
+                                    <Dropdown
                                         selected={(() => {
                                             const { eimDefaultApp, installedApps } = this.state;
                                             if (!eimDefaultApp) return 0;
@@ -730,8 +783,8 @@
                                             else if (selected === 1) newApp = '__last_used__';
                                             else newApp = this.state.installedApps[selected - 2].id;
                                             this.setState({ eimDefaultApp: newApp }, () => this.saveSettings());
-                                            const label = selected === 0 ? 'None' : selected === 1 ? 'Last used' : this.state.installedApps[selected - 2].title;
-                                            this.appendLog('EIM default set to: ' + label);
+                                            const appLabel = selected === 0 ? 'None' : selected === 1 ? 'Last used' : this.state.installedApps[selected - 2].title;
+                                            this.appendLog('EIM default set to: ' + appLabel);
                                             new LS2Request().send({
                                                 service: 'luna://me.wouterdek.magic4pc.service/',
                                                 method: 'setDefaultApp',
@@ -742,16 +795,22 @@
                                         {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
                                     </Dropdown>
                                 </div>
-                                <Input
-                                    title="WoL MAC"
-                                    placeholder="XX:XX:XX:XX:XX:XX"
-                                    value={this.state.wolMac}
-                                    invalid={this.state.wolMacValid === false}
-                                    invalidMessage="Invalid MAC address"
-                                    subtitle={this.state.wolMacValid === null ? 'disabled' : this.state.wolMacValid === true ? 'active' : null}
-                                    onChange={({value}) => this.onWolMacChange({target: {value}})}
-                                    size="small"
-                                />
+                                <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+                                    <span style={{fontSize: '0.75em', fontStyle: 'italic', opacity: 0.7, paddingBottom: '0.2em'}}>WoL MAC</span>
+                                    <Input
+                                        popupType="overlay"
+                                        placeholder="XX:XX:XX:XX:XX:XX"
+                                        value={this.state.wolMac}
+                                        invalid={this.state.wolMacValid === false}
+                                        invalidMessage="Invalid MAC address"
+                                        subtitle={this.state.wolMacValid === null ? 'disabled' : this.state.wolMacValid === true ? 'active' : null}
+                                        onActivate={() => { this.appendLogPersist('[wol] Input onActivate'); this._kbWasOpen = true; this.setState({ wolMacActive: true }); }}
+                                        onDeactivate={() => { this.appendLogPersist('[wol] Input onDeactivate'); this.setState({ wolMacActive: false }); }}
+                                        onClose={() => { this.appendLogPersist('[wol] Input onClose'); this.setState({ wolMacActive: false }); }}
+                                        onChange={({value}) => this.onWolMacChange({target: {value}})}
+                                        size="small"
+                                    />
+                                </div>
                             </div>
                         </Popup>
                         </div>
