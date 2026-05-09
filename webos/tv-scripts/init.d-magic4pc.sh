@@ -23,9 +23,9 @@ track_foreground() {
         if [ -n "$appId" ]; then
             # Track ALL foreground apps including magic4pc for suspend detection
             echo "$appId" > /tmp/magic4pc-foreground
-            # Only save non-EIM apps as last-app
+            # Only save non-EIM apps as last-app (and not magic4pc itself)
             case "$appId" in
-                com.webos.app.hdmi[0-9]|com.webos.app.externalinput.*|com.webos.app.livetv)
+                com.webos.app.hdmi[0-9]|com.webos.app.externalinput.*|com.webos.app.livetv|me.wouterdek.magic4pc)
                     # EIM source is active — mark as already running so magic4pc won't auto-launch
                     if [ "$appId" != "me.wouterdek.magic4pc" ] && [ ! -f "$RUN_STATE" ]; then
                         echo "running" > "$RUN_STATE"
@@ -49,9 +49,9 @@ monitor_power() {
         state=$(grep -v '^Script' /tmp/m4p_power_raw.txt | tr -d '\r' | grep '"state"' | head -1 | sed 's/.*"state": *"\([^"]*\)".*/\1/')
         if [ "$state" = "Suspend" ] && [ "$prev_state" != "Suspend" ]; then
             foreground=$(cat /tmp/magic4pc-foreground 2>/dev/null)
-            # EIM sources: HDMI1-4, AV1/2, Component, SCART, LiveTV
+            # EIM sources + magic4pc itself: keep run-state on suspend
             case "$foreground" in
-                com.webos.app.hdmi[0-9]|com.webos.app.externalinput.*|com.webos.app.livetv)
+                com.webos.app.hdmi[0-9]|com.webos.app.externalinput.*|com.webos.app.livetv|me.wouterdek.magic4pc)
                     echo "[magic4pc init] suspend: foreground=$foreground is EIM source, keeping run-state" >> /tmp/m4p_debug.log
                     ;;
                 *)
