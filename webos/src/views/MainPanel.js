@@ -31,6 +31,8 @@
             this.onWheel = this.onWheel.bind(this);
             this.onMouse = this.onMouse.bind(this);
             this.onWolMacChange = this.onWolMacChange.bind(this);
+            this.onKeyboardShow = this.onKeyboardShow.bind(this);
+            this.onKeyboardHide = this.onKeyboardHide.bind(this);
 
             this.state = {
                 label: '',
@@ -39,12 +41,13 @@
                 popupOpen: false,
                 logOpen: false,
                 settingsButtonVisible: true,
-                installedApps: [],   // [{id, title}]
-                eimDefaultApp: null, // appId string, '__last_used__', or null = None
-                lastUsedAppId: null, // tracked by service via getForegroundAppInfo
-                checkingAutoLaunch: true, // hide UI until we know if we should auto-launch
-                wolMac: '',          // WoL MAC address input
-                wolMacValid: null,   // true/false/null (null = empty)
+                installedApps: [],
+                eimDefaultApp: null,
+                lastUsedAppId: null,
+                checkingAutoLaunch: true,
+                wolMac: '',
+                wolMacValid: null,
+                keyboardOffset: 0,  // px to shift popup up when keyboard is visible
             };
             this.logEndRef = React.createRef();
             this.logContainerRef = React.createRef();
@@ -400,6 +403,12 @@
             document.addEventListener('mousedown', this.onMouse, false);
             document.addEventListener('mouseup', this.onMouse, false);
             document.addEventListener('wheel', this.onWheel, false);
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', () => {
+                    const kbHeight = window.innerHeight - window.visualViewport.height;
+                    this.setState({ keyboardOffset: kbHeight > 50 ? kbHeight : 0 });
+                });
+            }
             this.loadSettings();
 
             // Auto-register as EIM device so system keys reach the app
@@ -472,6 +481,20 @@
                     },
                 });
             }
+        }
+
+        onKeyboardShow() {
+            // When soft keyboard appears, shift popup up so input stays visible
+            const vh = window.innerHeight;
+            const vvh = window.visualViewport ? window.visualViewport.height : vh;
+            const kbHeight = vh - vvh;
+            if (kbHeight > 50) {
+                this.setState({ keyboardOffset: kbHeight });
+            }
+        }
+
+        onKeyboardHide() {
+            this.setState({ keyboardOffset: 0 });
         }
 
         validateMac(mac) {
@@ -656,7 +679,7 @@
         };
 
         render() {
-            const {logOpen, logLines, label, popupOpen, videoSource, settingsButtonVisible, checkingAutoLaunch} = this.state;
+            const {logOpen, logLines, label, popupOpen, videoSource, settingsButtonVisible, checkingAutoLaunch, keyboardOffset} = this.state;
             const version = '1.1.0 (' + process.env.BUILD_DATE + ')';
 
             return (
@@ -670,7 +693,7 @@
                     </video>
                     <div style={this.overlayStyle}>
                         <div style={{pointerEvents: 'auto'}}>
-                        <Popup open={popupOpen} onClose={this.handleClosePopup}>
+                        <Popup open={popupOpen} onClose={this.handleClosePopup} style={keyboardOffset > 0 ? {marginBottom: keyboardOffset + 'px', transition: 'margin-bottom 0.2s ease'} : {transition: 'margin-bottom 0.2s ease'}}>
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                                 <p id="status">{label}</p>
                                 <span style={{display: 'flex', alignItems: 'center', gap: '1em'}}>
@@ -680,7 +703,7 @@
                                     <span style={{opacity: 0.5, fontSize: '0.8em'}}>v{version}</span>
                                 </span>
                             </div>
-                            <div style={{display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5em'}}>
+                            <div style={{display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: '0.5em'}}>
                                 <Dropdown
                                     defaultSelected={this.inputSources.indexOf(videoSource)}
                                     title="Input source"
@@ -722,7 +745,7 @@
                                         {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
                                     </Dropdown>
                                 </div>
-                                <div style={{display: 'inline-flex', flexDirection: 'column', gap: '0.2em'}}>
+                                <div style={{display: 'flex', flexDirection: 'column', gap: '0.2em'}}>
                                     <label style={{fontSize: '0.75em', opacity: 0.7}}>
                                         WoL MAC
                                         {this.state.wolMacValid === null && <span style={{opacity: 0.5}}> – disabled</span>}
