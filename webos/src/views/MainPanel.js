@@ -703,7 +703,7 @@
                                     <span style={{opacity: 0.5, fontSize: '0.8em'}}>v{version}</span>
                                 </span>
                             </div>
-                            <div style={{display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5em'}}>
+                            <div style={{display: 'grid', gridTemplateColumns: 'auto auto auto 1fr auto', alignItems: 'center', gap: '0.5em'}}>
                                 <Dropdown
                                     defaultSelected={this.inputSources.indexOf(videoSource)}
                                     title="Input source"
@@ -711,13 +711,9 @@
                                 >
                                     {this.inputSourceLabels}
                                 </Dropdown>
-                                <Button onClick={this.startService} size="small">
-                                    Enable
-                                </Button>
-                                <Button onClick={this.stopService} size="small">
-                                    Disable
-                                </Button>
-                                <div style={{width: '16em'}}>
+                                <Button onClick={this.startService} size="small">Enable</Button>
+                                <Button onClick={this.stopService} size="small">Disable</Button>
+                                <div>
                                     <Dropdown
                                         title="Default app on exit"
                                         selected={(() => {
@@ -745,7 +741,7 @@
                                         {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
                                     </Dropdown>
                                 </div>
-                                <div style={{position: 'relative', paddingTop: '1.4em'}}>
+                                <div onClick={e => e.stopPropagation()} style={{position: 'relative', paddingTop: '1.4em'}}>
                                     <label style={{
                                         position: 'absolute', top: 0, left: 0,
                                         fontSize: '0.75em', opacity: 0.7, whiteSpace: 'nowrap'
