@@ -53,6 +53,7 @@ function startUnicastingData(client, rinfo, request) {
 	unicastDataActive = true;
 	unicastClient = client;
 	unicastRInfo = rinfo;
+	stopWol(); // client connected — no need to wake
 
 	// Settings
 	var settings = {};
@@ -96,6 +97,7 @@ function startUnicastingData(client, rinfo, request) {
 			// client timed out
 			//TODO: enable keepalive
 			unicastDataActive = false;
+			startWol(); // client disconnected — start waking
 
 			var waitTimer = setInterval(function () {
 				if (client == null) {
@@ -356,6 +358,62 @@ function startBroadcastingAdvertisement() {
 var serviceActive = false;
 var keepAliveActivity = null;
 var pendingStart = false;
+
+// Wake-on-LAN
+var wolMac = null; // set via setWolMac, persisted in PERSISTENT_DIR/magic4pc-wol-mac
+var wolInterval = null;
+
+function sendWol() {
+	if (!wolMac) return;
+	try {
+		var macHex = wolMac.replace(/[:\-]/g, '');
+		if (macHex.length !== 12) return;
+		var macBytes = Buffer.from(macHex, 'hex');
+		var magic = Buffer.concat([Buffer.alloc(6, 0xff)].concat(Array(16).fill(macBytes)));
+		var sock = dgram.createSocket('udp4');
+		sock.bind(function () {
+			sock.setBroadcast(true);
+			sock.send(magic, 0, magic.length, 9, '255.255.255.255', function () {
+				sock.close();
+			});
+		});
+	} catch (e) {
+		addLog('WoL error: ' + e.message);
+	}
+}
+
+function startWol() {
+	if (wolInterval) return;
+	if (!wolMac) return;
+	wolInterval = setInterval(function () {
+		if (!serviceActive || unicastDataActive) {
+			stopWol();
+			return;
+		}
+		sendWol();
+	}, 5000);
+	sendWol(); // send immediately
+	addLog('WoL started for ' + wolMac);
+}
+
+function stopWol() {
+	if (wolInterval) {
+		clearInterval(wolInterval);
+		wolInterval = null;
+		addLog('WoL stopped');
+	}
+}
+
+function loadWolMac() {
+	try {
+		var mac = fs.readFileSync(PERSISTENT_DIR + '/magic4pc-wol-mac', 'utf8').trim();
+		if (isValidMac(mac)) { wolMac = mac; }
+	} catch (e) {}
+}
+
+function isValidMac(mac) {
+	return /^([0-9a-fA-F]{2}[:\-]){5}[0-9a-fA-F]{2}$/.test(mac);
+}
 service.register('start', function (message) {
 	if (serviceActive) {
 		addLog('start called but already active');
@@ -366,12 +424,14 @@ service.register('start', function (message) {
 
 	addLog('Service starting v1.1.1');
 	serviceActive = true;
+	loadWolMac();
 	service.activityManager.create('keepAlive', function (activity) {
 		keepAliveActivity = activity;
 		addLog('keepAlive activity created');
 	});
 	startBroadcastingAdvertisement();
 	addLog('Broadcasting started');
+	startWol();
 	pendingStart = false;
 	message.respond({});
 });
@@ -412,6 +472,7 @@ service.register('stop', function (message) {
 
 	addLog('Service stopping');
 	serviceActive = false;
+	stopWol();
 	service.activityManager.complete(keepAliveActivity, function (activity) {});
 	keepAliveActivity = null;
 	broadcastAdsActive = false;
@@ -439,6 +500,7 @@ service.register('query', function (message) {
 		broadcastAdsActive: broadcastAdsActive,
 		isConnected: unicastDataActive,
 		unicastRInfo: unicastDataActive ? unicastRInfo : null,
+		wolMac: wolMac || '',
 		lastUsedAppId: (function() {
 			if (lastUsedAppId) return lastUsedAppId;
 			try { return fs.readFileSync(PERSISTENT_DIR + '/magic4pc-last-app', 'utf8').trim() || null; } catch(e) { return null; }
@@ -499,6 +561,26 @@ service.register('setDefaultApp', function (message) {
 		message.respond({ returnValue: true });
 	} catch (e) {
 		message.respond({ returnValue: false, errorText: e.message });
+	}
+});
+
+// Persist WoL MAC address
+service.register('setWolMac', function (message) {
+	var mac = (message.payload && message.payload.mac) ? message.payload.mac.trim() : '';
+	if (mac === '' || mac === 'none') {
+		wolMac = null;
+		try { fs.writeFileSync(PERSISTENT_DIR + '/magic4pc-wol-mac', 'none'); } catch (e) {}
+		stopWol();
+		addLog('WoL disabled');
+		message.respond({ returnValue: true });
+	} else if (isValidMac(mac)) {
+		wolMac = mac;
+		try { fs.writeFileSync(PERSISTENT_DIR + '/magic4pc-wol-mac', mac); } catch (e) {}
+		addLog('WoL MAC set: ' + mac);
+		if (serviceActive && !unicastDataActive) startWol();
+		message.respond({ returnValue: true });
+	} else {
+		message.respond({ returnValue: false, errorText: 'Invalid MAC address' });
 	}
 });
 

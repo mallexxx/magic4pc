@@ -30,6 +30,7 @@
             this.handleToggleLog = this.handleToggleLog.bind(this);
             this.onWheel = this.onWheel.bind(this);
             this.onMouse = this.onMouse.bind(this);
+            this.onWolMacChange = this.onWolMacChange.bind(this);
 
             this.state = {
                 label: '',
@@ -42,6 +43,8 @@
                 eimDefaultApp: null, // appId string, '__last_used__', or null = None
                 lastUsedAppId: null, // tracked by service via getForegroundAppInfo
                 checkingAutoLaunch: true, // hide UI until we know if we should auto-launch
+                wolMac: '',          // WoL MAC address input
+                wolMacValid: null,   // true/false/null (null = empty)
             };
             this.logEndRef = React.createRef();
             this.logContainerRef = React.createRef();
@@ -256,6 +259,10 @@
                     if (msg.lastUsedAppId) {
                         this.setState({lastUsedAppId: msg.lastUsedAppId});
                     }
+                    if (msg.wolMac && !this.state.wolMac) {
+                        const mac = msg.wolMac;
+                        this.setState({ wolMac: mac, wolMacValid: mac ? this.validateMac(mac) : null });
+                    }
                     if (msg.log) {
                         msg.log.forEach(line => this.appendLog('[svc] ' + line));
                     }
@@ -455,6 +462,31 @@
             }
         }
 
+        validateMac(mac) {
+            return /^([0-9a-fA-F]{2}[:\-]){5}[0-9a-fA-F]{2}$/.test(mac.trim());
+        }
+
+        onWolMacChange(e) {
+            const mac = e.target.value;
+            const valid = mac.trim() === '' ? null : this.validateMac(mac);
+            this.setState({ wolMac: mac, wolMacValid: valid });
+            if (valid) {
+                new LS2Request().send({
+                    service: 'luna://me.wouterdek.magic4pc.service/',
+                    method: 'setWolMac',
+                    parameters: { mac: mac.trim() },
+                    onSuccess: () => this.appendLog('WoL MAC saved: ' + mac.trim()),
+                    onFailure: (err) => this.appendLog('WoL MAC error: ' + JSON.stringify(err)),
+                });
+            } else if (mac.trim() === '') {
+                new LS2Request().send({
+                    service: 'luna://me.wouterdek.magic4pc.service/',
+                    method: 'setWolMac',
+                    parameters: { mac: 'none' },
+                });
+            }
+        }
+
         componentWillUnmount() {
             document.removeEventListener('keydown', this.onButtonPress, false);
             document.removeEventListener('keyup', this.onButtonPress, false);
@@ -629,7 +661,12 @@
                         <Popup open={popupOpen} onClose={this.handleClosePopup}>
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                                 <p id="status">{label}</p>
-                                <span style={{opacity: 0.5, fontSize: '0.8em'}}>v{version}</span>
+                                <span style={{display: 'flex', alignItems: 'center', gap: '1em'}}>
+                                    <Button onClick={this.handleToggleLog} size="small">
+                                        {logOpen ? 'Hide Log' : 'Show Log'}
+                                    </Button>
+                                    <span style={{opacity: 0.5, fontSize: '0.8em'}}>v{version}</span>
+                                </span>
                             </div>
                             <div>
                                 <Dropdown
@@ -645,38 +682,60 @@
                                 <Button onClick={this.stopService} size="small">
                                     Disable
                                 </Button>
-                                <div style={{width: '20em', display: 'inline-block'}}>
-                                    <Dropdown
-                                        title="Default app on exit"
-                                        selected={(() => {
-                                            const { eimDefaultApp, installedApps } = this.state;
-                                            if (!eimDefaultApp) return 0;
-                                            if (eimDefaultApp === '__last_used__') return 1;
-                                            const idx = installedApps.findIndex(a => a.id === eimDefaultApp);
-                                            return idx >= 0 ? idx + 2 : 0;
-                                        })()}
-                                        onSelect={({selected}) => {
-                                            let newApp = null;
-                                            if (selected === 0) newApp = null;
-                                            else if (selected === 1) newApp = '__last_used__';
-                                            else newApp = this.state.installedApps[selected - 2].id;
-                                            this.setState({ eimDefaultApp: newApp }, () => this.saveSettings());
-                                            const label = selected === 0 ? 'None' : selected === 1 ? 'Last used' : this.state.installedApps[selected - 2].title;
-                                            this.appendLog('EIM default set to: ' + label);
-                                            // Persist to file so init.d can read it on power-on
-                                            new LS2Request().send({
-                                                service: 'luna://me.wouterdek.magic4pc.service/',
-                                                method: 'setDefaultApp',
-                                                parameters: { appId: newApp || 'none' },
-                                            });
-                                        }}
-                                    >
-                                        {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
-                                    </Dropdown>
+                                <div style={{display: 'flex', alignItems: 'flex-end', gap: '1em'}}>
+                                    <div style={{width: '20em'}}>
+                                        <Dropdown
+                                            title="Default app on exit"
+                                            selected={(() => {
+                                                const { eimDefaultApp, installedApps } = this.state;
+                                                if (!eimDefaultApp) return 0;
+                                                if (eimDefaultApp === '__last_used__') return 1;
+                                                const idx = installedApps.findIndex(a => a.id === eimDefaultApp);
+                                                return idx >= 0 ? idx + 2 : 0;
+                                            })()}
+                                            onSelect={({selected}) => {
+                                                let newApp = null;
+                                                if (selected === 0) newApp = null;
+                                                else if (selected === 1) newApp = '__last_used__';
+                                                else newApp = this.state.installedApps[selected - 2].id;
+                                                this.setState({ eimDefaultApp: newApp }, () => this.saveSettings());
+                                                const label = selected === 0 ? 'None' : selected === 1 ? 'Last used' : this.state.installedApps[selected - 2].title;
+                                                this.appendLog('EIM default set to: ' + label);
+                                                // Persist to file so init.d can read it on power-on
+                                                new LS2Request().send({
+                                                    service: 'luna://me.wouterdek.magic4pc.service/',
+                                                    method: 'setDefaultApp',
+                                                    parameters: { appId: newApp || 'none' },
+                                                });
+                                            }}
+                                        >
+                                            {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
+                                        </Dropdown>
+                                    </div>
+                                    <div style={{display: 'flex', flexDirection: 'column', gap: '0.3em'}}>
+                                        <label style={{fontSize: '0.8em', opacity: 0.7}}>
+                                            Wake-on-LAN MAC
+                                            {this.state.wolMacValid === null && <span style={{opacity: 0.5}}> – disabled</span>}
+                                            {this.state.wolMacValid === false && <span style={{color: '#f66'}}> – invalid</span>}
+                                            {this.state.wolMacValid === true && <span style={{color: '#6f6'}}> – active</span>}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="XX:XX:XX:XX:XX:XX"
+                                            value={this.state.wolMac}
+                                            onChange={this.onWolMacChange}
+                                            style={{
+                                                background: 'rgba(255,255,255,0.1)',
+                                                border: '1px solid ' + (this.state.wolMacValid === false ? '#f66' : this.state.wolMacValid === true ? '#6f6' : 'rgba(255,255,255,0.3)'),
+                                                color: '#fff',
+                                                padding: '0.4em 0.6em',
+                                                fontSize: '0.9em',
+                                                borderRadius: '4px',
+                                                width: '14em',
+                                            }}
+                                        />
+                                    </div>
                                 </div>
-                                <Button onClick={this.handleToggleLog} size="small">
-                                    {logOpen ? 'Hide Log' : 'Show Log'}
-                                </Button>
                             </div>
                         </Popup>
                         </div>
