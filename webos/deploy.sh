@@ -27,6 +27,7 @@ $LUNA -n 1 -f "luna://com.webos.appInstallService/dev/remove" "{\"id\":\"$APP\"}
 sleep 2
 
 echo "==> Installing (waiting for 'installed')..."
+# luna-send -i (subscribe) cannot be used through the wrapper — use script directly
 ssh "$TV" "script -q -c \"luna-send -i -f luna://com.webos.appInstallService/dev/install '{\\\"id\\\":\\\"$APP\\\",\\\"ipkUrl\\\":\\\"/tmp/magic4pc.ipk\\\",\\\"subscribe\\\":true}'\" /tmp/install.txt &
   for i in \$(seq 1 30); do
     sleep 1
