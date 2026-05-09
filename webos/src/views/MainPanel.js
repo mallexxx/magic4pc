@@ -693,7 +693,7 @@
                     </video>
                     <div style={this.overlayStyle}>
                         <div style={{pointerEvents: 'auto'}}>
-                        <Popup open={popupOpen} onClose={this.handleClosePopup} style={keyboardOffset > 0 ? {marginBottom: keyboardOffset + 'px', transition: 'margin-bottom 0.2s ease'} : {transition: 'margin-bottom 0.2s ease'}}>
+                        <Popup open={popupOpen} onClose={this.handleClosePopup} noAutoDismiss style={keyboardOffset > 0 ? {marginBottom: keyboardOffset + 'px', transition: 'margin-bottom 0.2s ease'} : {transition: 'margin-bottom 0.2s ease'}}>
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                                 <p id="status">{label}</p>
                                 <span style={{display: 'flex', alignItems: 'center', gap: '1em'}}>
@@ -741,7 +741,7 @@
                                         {['None', 'Last used', ...this.state.installedApps.map(a => a.title)]}
                                     </Dropdown>
                                 </div>
-                                <div onClick={e => e.stopPropagation()} style={{position: 'relative', paddingTop: '1.4em'}}>
+                                <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} style={{position: 'relative', paddingTop: '1.4em'}}>
                                     <label style={{
                                         position: 'absolute', top: 0, left: 0,
                                         fontSize: '0.75em', opacity: 0.7, whiteSpace: 'nowrap'
@@ -756,8 +756,6 @@
                                         placeholder="XX:XX:XX:XX:XX:XX"
                                         value={this.state.wolMac}
                                         onChange={this.onWolMacChange}
-                                        onFocus={() => this.setState({ keyboardOffset: 400 })}
-                                        onBlur={() => this.setState({ keyboardOffset: 0 })}
                                         style={{
                                             background: 'rgba(255,255,255,0.1)',
                                             border: '1px solid ' + (this.state.wolMacValid === false ? '#f66' : this.state.wolMacValid === true ? '#6f6' : 'rgba(255,255,255,0.3)'),
